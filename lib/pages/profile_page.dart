@@ -13,10 +13,19 @@ class ProfilePage extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 1,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF49454F)),
-          onPressed: () => Navigator.of(context).maybePop(),
-        ),
+        leading: (() {
+          // Hide back button if in MainNavigation (bottom nav), show otherwise
+          final mainNavState = context.findAncestorStateOfType<State<StatefulWidget>>();
+          if (mainNavState != null && mainNavState.widget.runtimeType.toString() == 'MainNavigation') {
+            return null;
+          }
+          return IconButton(
+            icon: const Icon(Icons.arrow_back, color: Color(0xFF49454F)),
+            onPressed: () {
+              Navigator.of(context).maybePop();
+            },
+          );
+        })(),
         title: const Text('Profile', style: TextStyle(color: Color(0xFF1D1B20), fontWeight: FontWeight.w500)),
         centerTitle: true,
       ),
@@ -201,51 +210,6 @@ class ProfilePage extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _ProfileActionTile extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-  final Widget? trailing;
-  final Color? iconColor;
-  final Color? titleColor;
-
-  const _ProfileActionTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-    this.trailing,
-    this.iconColor,
-    this.titleColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(vertical: 4),
-      leading: CircleAvatar(
-        backgroundColor: const Color(0xFFF3F4F6),
-        child: Icon(icon, color: iconColor ?? const Color(0xFF49454F)),
-      ),
-      title: Text(
-        title,
-        style: TextStyle(
-          fontWeight: FontWeight.w600,
-          color: titleColor ?? const Color(0xFF111827),
-          fontSize: 18,
-        ),
-      ),
-      subtitle: subtitle.isNotEmpty
-          ? Text(subtitle, style: const TextStyle(color: Color(0xFF6B7280), fontSize: 15))
-          : null,
-      trailing: trailing,
-      onTap: onTap,
-      shape: const Border(bottom: BorderSide(color: Color(0xFFE5E7EB), width: 1)),
     );
   }
 }

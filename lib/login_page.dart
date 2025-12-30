@@ -21,13 +21,31 @@ class _LoginPageState extends State<LoginPage> {
     });
     // Simulate login delay
     await Future.delayed(const Duration(seconds: 1));
-    if (_usernameController.text.isNotEmpty && _passwordController.text.isNotEmpty) {
-      widget.onLogin(_usernameController.text);
-    } else {
+    
+    final username = _usernameController.text.trim();
+    final password = _passwordController.text.trim();
+    
+    if (username.isEmpty || password.isEmpty) {
       setState(() {
         _error = 'Please enter both username and password.';
         _loading = false;
       });
+      return;
+    }
+    
+    // Validate demo user credentials
+    if (username.toLowerCase() == 'demo') {
+      if (password == 'demo') {
+        widget.onLogin(username);
+      } else {
+        setState(() {
+          _error = 'Invalid password for demo user.';
+          _loading = false;
+        });
+      }
+    } else {
+      // For other users, accept any non-empty credentials for now
+      widget.onLogin(username);
     }
   }
 

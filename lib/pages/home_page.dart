@@ -6,7 +6,9 @@ import 'dart:convert';
 import '../models/study_place.dart';
 import 'menu_page.dart';
 import 'profile_page.dart';
+import '../services/favorites_manager.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 class MyHomePage extends StatefulWidget {
   final VoidCallback onLogout;
@@ -26,11 +28,29 @@ class _MyHomePageState extends State<MyHomePage> {
   String? _error;
   GoogleMapController? _mapController;
   bool _locationPermissionGranted = false;
+  final _favoritesManager = FavoritesManager();
+  
+  // Search functionality
+  final TextEditingController _searchController = TextEditingController();
+  bool _isSearching = false;
+  List<StudyPlace> _searchResults = [];
+  
+  // Voice search
+  late stt.SpeechToText _speech;
+  bool _isListening = false;
+  String _voiceText = '';
 
   @override
   void initState() {
     super.initState();
+    _speech = stt.SpeechToText();
     _checkLocationPermission();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _checkLocationPermission() async {
@@ -38,6 +58,7 @@ class _MyHomePageState extends State<MyHomePage> {
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
     }
+    if (!mounted) return;
     setState(() {
       _locationPermissionGranted = permission == LocationPermission.always || permission == LocationPermission.whileInUse;
     });
@@ -51,12 +72,14 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<void> _centerOnCurrentLocation() async {
     try {
       Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      if (!mounted) return;
       setState(() {
         _currentCenter = LatLng(position.latitude, position.longitude);
       });
       _mapController?.animateCamera(CameraUpdate.newLatLng(_currentCenter));
       _fetchPlacesAt(_currentCenter, _currentZoom);
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = 'Could not get current location.';
       });
@@ -85,6 +108,7 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _fetchPlacesAt(LatLng center, double zoom) async {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -135,6 +159,7 @@ class _MyHomePageState extends State<MyHomePage> {
             }
           }
         } else {
+          if (!mounted) return;
           setState(() {
             _error = 'Failed to fetch places (${t['type']})';
           });
@@ -150,11 +175,13 @@ class _MyHomePageState extends State<MyHomePage> {
         }
         return rank(a.type).compareTo(rank(b.type));
       });
+      if (!mounted) return;
       setState(() {
         _places = allPlaces;
         _loading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = 'Error: $e';
         _loading = false;
@@ -163,9 +190,78 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void _openMenu(BuildContext context) {
+    if (!mounted) return;
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (context) => const MenuPage()),
+      MaterialPageRoute(
+        builder: (context) => MenuPage(onSignOut: widget.onLogout),
+      ),
     );
+  }
+
+  void _performSearch(String query) {
+    if (!mounted) return;
+    if (query.isEmpty) {
+      setState(() {
+        _isSearching = false;
+        _searchResults = [];
+      });
+      return;
+    }
+
+    setState(() {
+      _isSearching = true;
+      _searchResults = _places.where((place) {
+        return place.name.toLowerCase().contains(query.toLowerCase()) ||
+               place.type.toLowerCase().contains(query.toLowerCase());
+      }).toList();
+    });
+  }
+
+  Future<void> _startListening() async {
+    bool available = await _speech.initialize(
+      onStatus: (status) {
+        if (status == 'done') {
+          if (!mounted) return;
+          setState(() => _isListening = false);
+        }
+      },
+      onError: (error) {
+        if (!mounted) return;
+        setState(() => _isListening = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: {error.errorMsg}')),
+        );
+      },
+    );
+
+    if (available) {
+      if (!mounted) return;
+      setState(() => _isListening = true);
+      _speech.listen(
+        onResult: (result) {
+          if (!mounted) return;
+          setState(() {
+            _voiceText = result.recognizedWords;
+            _searchController.text = _voiceText;
+            _performSearch(_voiceText);
+          });
+        },
+        listenOptions: stt.SpeechListenOptions(
+          listenMode: stt.ListenMode.confirmation,
+        ),
+      );
+    } else {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Speech recognition not available')),
+      );
+    }
+  }
+
+  void _stopListening() {
+    _speech.stop();
+    if (!mounted) return;
+    setState(() => _isListening = false);
   }
 
   String? _getPhotoUrl(String? photoReference) {
@@ -287,36 +383,86 @@ class _MyHomePageState extends State<MyHomePage> {
             top: MediaQuery.of(context).padding.top + 64,
             left: 16,
             right: 16,
-            child: Container(
-              height: 56,
-              decoration: BoxDecoration(
-                color: const Color(0xFFECE6F0),
-                borderRadius: BorderRadius.circular(28),
-                boxShadow: [
-                  BoxShadow(
-                    color: Color.fromRGBO(0, 0, 0, 0.1),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  const Icon(Icons.search, color: Color(0xFF49454F)),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Search for a place to study',
-                      style: TextStyle(
-                        color: Color.fromRGBO(73, 69, 79, 0.8),
-                        fontSize: 16,
-                        fontFamily: 'Roboto',
-                      ),
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _isSearching = true;
+                });
+              },
+              child: Container(
+                height: 56,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFECE6F0),
+                  borderRadius: BorderRadius.circular(28),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Color.fromRGBO(0, 0, 0, 0.1),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
                     ),
-                  ),
-                  const Icon(Icons.mic, color: Color(0xFF49454F)),
-                ],
+                  ],
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: _isSearching
+                    ? Row(
+                        children: [
+                          const Icon(Icons.search, color: Color(0xFF49454F)),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextField(
+                              controller: _searchController,
+                              autofocus: true,
+                              onChanged: _performSearch,
+                              decoration: const InputDecoration(
+                                hintText: 'Search for a place to study',
+                                border: InputBorder.none,
+                                hintStyle: TextStyle(
+                                  color: Color.fromRGBO(73, 69, 79, 0.8),
+                                  fontSize: 16,
+                                  fontFamily: 'Roboto',
+                                ),
+                              ),
+                              style: const TextStyle(
+                                color: Color(0xFF1D1B20),
+                                fontSize: 16,
+                                fontFamily: 'Roboto',
+                              ),
+                            ),
+                          ),
+                          if (_searchController.text.isNotEmpty)
+                            IconButton(
+                              icon: const Icon(Icons.clear, color: Color(0xFF49454F)),
+                              onPressed: () {
+                                _searchController.clear();
+                                _performSearch('');
+                              },
+                            ),
+                          IconButton(
+                            icon: Icon(
+                              _isListening ? Icons.mic : Icons.mic_none,
+                              color: _isListening ? Colors.red : const Color(0xFF49454F),
+                            ),
+                            onPressed: _isListening ? _stopListening : _startListening,
+                          ),
+                        ],
+                      )
+                    : Row(
+                        children: [
+                          const Icon(Icons.search, color: Color(0xFF49454F)),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Search for a place to study',
+                              style: TextStyle(
+                                color: Color.fromRGBO(73, 69, 79, 0.8),
+                                fontSize: 16,
+                                fontFamily: 'Roboto',
+                              ),
+                            ),
+                          ),
+                          const Icon(Icons.mic, color: Color(0xFF49454F)),
+                        ],
+                      ),
               ),
             ),
           ),
@@ -427,16 +573,58 @@ class _MyHomePageState extends State<MyHomePage> {
                             Positioned(
                               top: 8,
                               right: 8,
-                              child: GestureDetector(
-                                onTap: () => setState(() => _selectedPlace = null),
-                                child: Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: BoxDecoration(
-                                    color: Color.fromRGBO(255, 255, 255, 0.8),
-                                    shape: BoxShape.circle,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  // Favorite button
+                                  GestureDetector(
+                                    onTap: () async {
+                                      await _favoritesManager.toggleFavorite(_selectedPlace!);
+                                      if (!mounted) return;
+                                      setState(() {});
+                                      final isFavorite = _favoritesManager.isFavorite(_selectedPlace!);
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            isFavorite 
+                                              ? '${_selectedPlace!.name} added to favorites' 
+                                              : '${_selectedPlace!.name} removed from favorites'
+                                          ),
+                                          duration: const Duration(seconds: 2),
+                                        ),
+                                      );
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: BoxDecoration(
+                                        color: Color.fromRGBO(255, 255, 255, 0.8),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        _favoritesManager.isFavorite(_selectedPlace!)
+                                          ? Icons.favorite
+                                          : Icons.favorite_border,
+                                        size: 18,
+                                        color: _favoritesManager.isFavorite(_selectedPlace!)
+                                          ? Colors.red
+                                          : Colors.black,
+                                      ),
+                                    ),
                                   ),
-                                  child: const Icon(Icons.close, size: 18, color: Colors.black),
-                                ),
+                                  const SizedBox(width: 8),
+                                  // Close button
+                                  GestureDetector(
+                                    onTap: () => setState(() => _selectedPlace = null),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: BoxDecoration(
+                                        color: Color.fromRGBO(255, 255, 255, 0.8),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(Icons.close, size: 18, color: Colors.black),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
@@ -498,7 +686,85 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
             ),
 
-          // 7. Loading Indicator
+          // 7. Search Results Overlay
+          if (_isSearching && _searchResults.isNotEmpty)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 128,
+              left: 16,
+              right: 16,
+              child: Container(
+                constraints: const BoxConstraints(maxHeight: 400),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color.fromRGBO(0, 0, 0, 0.2),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _searchResults.length,
+                  itemBuilder: (context, index) {
+                    final place = _searchResults[index];
+                    return ListTile(
+                      leading: Icon(
+                        place.type.toLowerCase().contains('cafe')
+                            ? Icons.local_cafe
+                            : place.type.toLowerCase().contains('library')
+                                ? Icons.menu_book
+                                : Icons.work,
+                        color: const Color(0xFF6750A4),
+                      ),
+                      title: Text(
+                        place.name,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
+                        ),
+                      ),
+                      subtitle: Text(
+                        place.type,
+                        style: const TextStyle(
+                          color: Color(0xFF6B7280),
+                          fontSize: 14,
+                        ),
+                      ),
+                      trailing: place.rating != null
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.star, color: Color(0xFFFBBF24), size: 16),
+                                const SizedBox(width: 4),
+                                Text(
+                                  place.rating!.toStringAsFixed(1),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : null,
+                      onTap: () {
+                        setState(() {
+                          _selectedPlace = place;
+                          _isSearching = false;
+                          _searchController.clear();
+                        });
+                        _mapController?.animateCamera(
+                          CameraUpdate.newLatLng(place.location),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ),
+
+          // 8. Loading Indicator
           if (_loading)
             const Center(
               child: CircularProgressIndicator(color: Color(0xFF6750A4)),
@@ -520,64 +786,6 @@ class _MyHomePageState extends State<MyHomePage> {
                 ),
               ),
             ),
-        ],
-      ),
-      bottomNavigationBar: Container(
-        height: 80,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Color.fromRGBO(0, 0, 0, 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, -2),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _buildNavItem(Icons.home, 'Home', true),
-            _buildNavItem(Icons.bookmark_border, 'Favorites', false),
-            _buildNavItem(Icons.person_outline, 'Profile', false),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNavItem(IconData icon, String label, bool isActive) {
-    return GestureDetector(
-      onTap: label == 'Profile'
-          ? () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (context) => ProfilePage(onSignOut: widget.onLogout)),
-              );
-            }
-          : null,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-            decoration: BoxDecoration(
-              color: isActive ? const Color(0xFFEADDFF) : Colors.transparent,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Icon(
-              icon,
-              color: isActive ? const Color(0xFF21005D) : const Color(0xFF49454F),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
-              color: isActive ? const Color(0xFF1D1B20) : const Color(0xFF49454F),
-            ),
-          ),
         ],
       ),
     );

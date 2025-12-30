@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'login_page.dart';
-import 'pages/home_page.dart';
+import 'pages/main_navigation.dart';
+import 'services/favorites_manager.dart';
 
 void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load();
+  // Initialize favorites manager to load saved favorites
+  await FavoritesManager().initialize();
   runApp(const MyApp());
 }
 
@@ -39,7 +43,7 @@ class _MyAppState extends State<MyApp> {
       ),
       home: _username == null
           ? LoginPage(onLogin: _handleLogin)
-          : MyHomePage(onLogout: _handleLogout, username: _username!),
+          : MainNavigation(onLogout: _handleLogout, username: _username!),
     );
   }
 }

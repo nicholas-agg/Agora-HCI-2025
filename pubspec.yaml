@@ -37,6 +37,8 @@ dependencies:
   flutter_dotenv: ^5.1.0
   geolocator: ^10.1.0
   geocoding: ^2.1.0
+  speech_to_text: ^7.0.0
+  shared_preferences: ^2.2.2
 
 dev_dependencies:
   flutter_test:
