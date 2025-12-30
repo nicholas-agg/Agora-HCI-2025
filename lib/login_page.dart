@@ -51,8 +51,9 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Center(
         child: SingleChildScrollView(
           child: Padding(
@@ -83,7 +84,7 @@ class _LoginPageState extends State<LoginPage> {
                           'Sign In',
                           style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                                 fontWeight: FontWeight.bold,
-                                color: const Color(0xFF6750A4),
+                                color: colorScheme.primary,
                                 fontFamily: 'Roboto',
                                 letterSpacing: 0.5,
                               ),
@@ -93,12 +94,7 @@ class _LoginPageState extends State<LoginPage> {
                           controller: _usernameController,
                           decoration: InputDecoration(
                             labelText: 'Username',
-                            prefixIcon: const Icon(Icons.person, color: Color(0xFF6750A4)),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            filled: true,
-                            fillColor: const Color(0xFFECE6F0),
+                            prefixIcon: Icon(Icons.person, color: colorScheme.primary),
                           ),
                         ),
                         const SizedBox(height: 18),
@@ -107,28 +103,13 @@ class _LoginPageState extends State<LoginPage> {
                           obscureText: true,
                           decoration: InputDecoration(
                             labelText: 'Password',
-                            prefixIcon: const Icon(Icons.lock, color: Color(0xFF6750A4)),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            filled: true,
-                            fillColor: const Color(0xFFECE6F0),
+                            prefixIcon: Icon(Icons.lock, color: colorScheme.primary),
                           ),
                         ),
                         const SizedBox(height: 28),
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF6750A4),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 18),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              textStyle: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, fontFamily: 'Roboto'),
-                              elevation: 2,
-                            ),
                             onPressed: _loading ? null : _handleLogin,
                             child: _loading
                                 ? const SizedBox(
@@ -154,7 +135,7 @@ class _LoginPageState extends State<LoginPage> {
                 Text(
                   'Welcome to Agora',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: const Color(0xFF6750A4),
+                        color: colorScheme.primary,
                         fontWeight: FontWeight.w600,
                         fontSize: 18,
                         fontFamily: 'Roboto',

@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../services/theme_manager.dart';
 
 class MenuPage extends StatelessWidget {
   final VoidCallback? onSignOut;
@@ -6,19 +9,19 @@ class MenuPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F6FB),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: colorScheme.surface,
         elevation: 1,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF49454F)),
+          icon: Icon(Icons.arrow_back, color: colorScheme.onSurface),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: const Text(
           'Settings',
           style: TextStyle(
-            color: Color(0xFF1D1B20),
             fontWeight: FontWeight.w600,
             fontSize: 24,
           ),
@@ -28,15 +31,38 @@ class MenuPage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(0, 0, 0, 32),
         children: [
+          // Theme Toggle
+          Consumer<ThemeManager>(
+            builder: (context, themeManager, _) {
+              return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                elevation: 2,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                child: SwitchListTile(
+                  title: const Text('Dark Mode', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                  subtitle: const Text('Toggle between light and dark theme'),
+                  value: themeManager.themeMode == ThemeMode.dark,
+                  onChanged: (val) {
+                    themeManager.setTheme(val ? ThemeMode.dark : ThemeMode.light);
+                  },
+                  secondary: Icon(
+                    themeManager.themeMode == ThemeMode.dark ? Icons.dark_mode : Icons.light_mode,
+                    color: const Color(0xFF6750A4),
+                  ),
+                ),
+              );
+            },
+          ),
+
           // General Section Header
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            child: const Text(
+            child: Text(
               'General',
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
-                color: Color(0xFF6B7280),
+                color: colorScheme.onSurfaceVariant,
                 letterSpacing: 0.5,
               ),
             ),
@@ -51,7 +77,7 @@ class MenuPage extends StatelessWidget {
               leading: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                    color: const Color(0xFF6750A4).withValues(alpha: 0.1),
+                  color: const Color(0xFF6750A4).withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.info_outline, color: Color(0xFF6750A4)),
@@ -166,12 +192,12 @@ class MenuPage extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
             margin: const EdgeInsets.only(top: 16),
-            child: const Text(
+            child: Text(
               'Account',
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
-                color: Color(0xFF6B7280),
+                color: colorScheme.onSurfaceVariant,
                 letterSpacing: 0.5,
               ),
             ),

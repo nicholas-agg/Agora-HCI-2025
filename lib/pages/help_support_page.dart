@@ -5,23 +5,24 @@ class HelpSupportPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Help & Support'),
-        backgroundColor: Colors.white,
-        foregroundColor: Color(0xFF1D1B20),
+        title: Text('Help & Support', style: TextStyle(color: colorScheme.onSurface)),
+        backgroundColor: colorScheme.surface,
+        foregroundColor: colorScheme.onSurface,
         elevation: 1,
       ),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: const [
-            Text('Help & Support', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-            SizedBox(height: 16),
-            Text('This is a demo help and support page. For any issues or questions, please contact us at demo@agora.com.', style: TextStyle(fontSize: 16)),
-            SizedBox(height: 24),
-            Text('We are here to help you with any problems you encounter while using the demo app.', style: TextStyle(fontSize: 16)),
+          children: [
+            Text('Help & Support', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: colorScheme.onSurface)),
+            const SizedBox(height: 16),
+            Text('This is a demo help and support page. For any issues or questions, please contact us at demo@agora.com.', style: TextStyle(fontSize: 16, color: colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 24),
+            Text('We are here to help you with any problems you encounter while using the demo app.', style: TextStyle(fontSize: 16, color: colorScheme.onSurfaceVariant)),
           ],
         ),
       ),

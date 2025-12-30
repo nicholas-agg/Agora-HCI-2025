@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../models/study_place.dart';
 import '../services/favorites_manager.dart';
+import 'place_details_page.dart';
 
 class FavoritesPage extends StatefulWidget {
   const FavoritesPage({super.key});
@@ -85,16 +86,17 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F6FB),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: colorScheme.surface,
         elevation: 0,
         automaticallyImplyLeading: false,
-        title: const Text(
+        title: Text(
           'Favourites',
           style: TextStyle(
-            color: Color(0xFF1D1B20),
+            color: colorScheme.onSurface,
             fontWeight: FontWeight.w600,
             fontSize: 24,
           ),
@@ -105,18 +107,18 @@ class _FavoritesPageState extends State<FavoritesPage> {
         children: [
           // Search Bar
           Container(
-            color: Colors.white,
+            color: colorScheme.surface,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: TextField(
               controller: _searchController,
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
                 hintText: 'Search for a place to study',
-                hintStyle: const TextStyle(color: Color(0xFF9CA3AF)),
-                prefixIcon: const Icon(Icons.menu, color: Color(0xFF6B7280)),
-                suffixIcon: const Icon(Icons.search, color: Color(0xFF6B7280)),
+                hintStyle: TextStyle(color: colorScheme.onSurfaceVariant),
+                prefixIcon: Icon(Icons.menu, color: colorScheme.onSurfaceVariant),
+                suffixIcon: Icon(Icons.search, color: colorScheme.onSurfaceVariant),
                 filled: true,
-                fillColor: const Color(0xFFF3F4F6),
+                fillColor: colorScheme.surfaceContainerHighest,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(28),
                   borderSide: BorderSide.none,
@@ -128,15 +130,15 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
           // Filter Chips
           Container(
-            color: Colors.white,
+            color: colorScheme.surface,
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
             child: Row(
               children: [
-                _buildFilterChip('All', Icons.stars),
+                _buildFilterChip('All', Icons.stars, colorScheme),
                 const SizedBox(width: 8),
-                _buildFilterChip('Libraries', Icons.menu_book),
+                _buildFilterChip('Libraries', Icons.menu_book, colorScheme),
                 const SizedBox(width: 8),
-                _buildFilterChip('Cafeterias', Icons.local_cafe),
+                _buildFilterChip('Cafeterias', Icons.local_cafe, colorScheme),
               ],
             ),
           ),
@@ -158,16 +160,16 @@ class _FavoritesPageState extends State<FavoritesPage> {
     );
   }
 
-  Widget _buildFilterChip(String label, IconData icon) {
+  Widget _buildFilterChip(String label, IconData icon, ColorScheme colorScheme) {
     final isSelected = _selectedFilter == label;
     return GestureDetector(
       onTap: () => setState(() => _selectedFilter = label),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF6750A4) : Colors.white,
+          color: isSelected ? colorScheme.primary : colorScheme.surface,
           border: Border.all(
-            color: isSelected ? Colors.transparent : const Color(0xFFCAC4D0),
+            color: isSelected ? Colors.transparent : colorScheme.outlineVariant,
           ),
           borderRadius: BorderRadius.circular(100),
         ),
@@ -177,13 +179,13 @@ class _FavoritesPageState extends State<FavoritesPage> {
             Icon(
               icon,
               size: 18,
-              color: isSelected ? Colors.white : const Color(0xFF49454F),
+              color: isSelected ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
             ),
             const SizedBox(width: 8),
             Text(
               label,
               style: TextStyle(
-                color: isSelected ? Colors.white : const Color(0xFF49454F),
+                color: isSelected ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
                 fontWeight: FontWeight.w500,
                 fontSize: 14,
               ),
@@ -229,11 +231,19 @@ class _FavoritesPageState extends State<FavoritesPage> {
   Widget _buildFavoriteCard(StudyPlace place) {
     final photoUrl = _getPhotoUrl(place.photoReference);
     
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Column(
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => PlaceDetailsPage(place: place),
+          ),
+        );
+      },
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 16),
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Image Section
@@ -259,7 +269,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
                 right: 12,
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.9),
+                    color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
                     shape: BoxShape.circle,
                   ),
                   child: IconButton(
@@ -293,10 +303,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
                     Expanded(
                       child: Text(
                         place.name,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFF111827),
+                          color: Theme.of(context).colorScheme.onSurface,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -338,18 +348,18 @@ class _FavoritesPageState extends State<FavoritesPage> {
                       const SizedBox(width: 8),
                       Text(
                         place.rating!.toStringAsFixed(1),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w500,
-                          color: Color(0xFF4B5563),
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
                       if (place.userRatingsTotal != null)
                         Text(
                           ' (${place.userRatingsTotal})',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 16,
-                            color: Color(0xFF9CA3AF),
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                         ),
                     ],
@@ -359,14 +369,14 @@ class _FavoritesPageState extends State<FavoritesPage> {
                 // Location
                 Row(
                   children: [
-                    const Icon(Icons.location_on, size: 16, color: Color(0xFF6B7280)),
+                    Icon(Icons.location_on, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
                     const SizedBox(width: 4),
                     // TODO: Calculate actual distance from user location
-                    const Text(
+                    Text(
                       'View on map',
                       style: TextStyle(
                         fontSize: 16,
-                        color: Color(0xFF6B7280),
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ],
@@ -376,6 +386,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
           ),
         ],
       ),
+    ),
     );
   }
 

@@ -8,10 +8,11 @@ class ProfilePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F6FB),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: colorScheme.surface,
         elevation: 1,
         leading: (() {
           // Hide back button if in MainNavigation (bottom nav), show otherwise
@@ -20,40 +21,40 @@ class ProfilePage extends StatelessWidget {
             return null;
           }
           return IconButton(
-            icon: const Icon(Icons.arrow_back, color: Color(0xFF49454F)),
+            icon: Icon(Icons.arrow_back, color: colorScheme.onSurface),
             onPressed: () {
               Navigator.of(context).maybePop();
             },
           );
         })(),
-        title: const Text('Profile', style: TextStyle(color: Color(0xFF1D1B20), fontWeight: FontWeight.w500)),
+        title: Text('Profile', style: TextStyle(color: colorScheme.onSurface, fontWeight: FontWeight.w500)),
         centerTitle: true,
       ),
       body: Column(
         children: [
           Container(
-            color: Colors.white,
+            color: colorScheme.surface,
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
             child: Row(
               children: [
                 CircleAvatar(
                   radius: 36,
-                  backgroundColor: const Color(0xFFEADDFF),
-                  child: const Icon(Icons.person, size: 40, color: Color(0xFF4F378A)),
+                  backgroundColor: colorScheme.primaryContainer,
+                  child: Icon(Icons.person, size: 40, color: colorScheme.primary),
                 ),
                 const SizedBox(width: 20),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text('Demo User', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: Color(0xFF1D1B20))),
-                      SizedBox(height: 4),
-                      Text('demo@agora.com', style: TextStyle(fontSize: 15, color: Color(0xFF49454F))),
+                    children: [
+                      Text('Demo User', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: colorScheme.onSurface)),
+                      const SizedBox(height: 4),
+                      Text('demo@agora.com', style: TextStyle(fontSize: 15, color: colorScheme.onSurfaceVariant)),
                     ],
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.edit, color: Color(0xFF6750A4)),
+                  icon: Icon(Icons.edit, color: colorScheme.primary),
                   onPressed: () {
                     showDialog(
                       context: context,

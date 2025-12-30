@@ -43,6 +43,7 @@ class _MainNavigationState extends State<MainNavigation> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
@@ -51,10 +52,10 @@ class _MainNavigationState extends State<MainNavigation> {
       bottomNavigationBar: Container(
         height: 80,
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: colorScheme.surface,
           boxShadow: [
             BoxShadow(
-              color: const Color.fromRGBO(0, 0, 0, 0.05),
+              color: colorScheme.shadow.withOpacity(0.05),
               blurRadius: 10,
               offset: const Offset(0, -2),
             ),
@@ -63,16 +64,16 @@ class _MainNavigationState extends State<MainNavigation> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _buildNavItem(Icons.home, 'Home', 0),
-            _buildNavItem(Icons.bookmark, 'Favorites', 1),
-            _buildNavItem(Icons.person, 'Profile', 2),
+            _buildNavItem(Icons.home, 'Home', 0, colorScheme),
+            _buildNavItem(Icons.bookmark, 'Favorites', 1, colorScheme),
+            _buildNavItem(Icons.person, 'Profile', 2, colorScheme),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildNavItem(IconData icon, String label, int index) {
+  Widget _buildNavItem(IconData icon, String label, int index, ColorScheme colorScheme) {
     final isActive = _currentIndex == index;
     return GestureDetector(
       onTap: () => _onTabTapped(index),
@@ -85,14 +86,14 @@ class _MainNavigationState extends State<MainNavigation> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
               decoration: BoxDecoration(
-                color: isActive ? const Color(0xFFEADDFF) : Colors.transparent,
+                color: isActive ? colorScheme.primaryContainer : Colors.transparent,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Icon(
                 isActive 
                   ? (index == 0 ? Icons.home : index == 1 ? Icons.bookmark : Icons.person)
                   : (index == 0 ? Icons.home_outlined : index == 1 ? Icons.bookmark_border : Icons.person_outline),
-                color: isActive ? const Color(0xFF21005D) : const Color(0xFF49454F),
+                color: isActive ? colorScheme.primary : colorScheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 4),
@@ -101,7 +102,7 @@ class _MainNavigationState extends State<MainNavigation> {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
-                color: isActive ? const Color(0xFF1D1B20) : const Color(0xFF49454F),
+                color: isActive ? colorScheme.onSurface : colorScheme.onSurfaceVariant,
               ),
             ),
           ],

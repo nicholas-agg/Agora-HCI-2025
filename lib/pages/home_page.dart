@@ -6,6 +6,7 @@ import 'dart:convert';
 import '../models/study_place.dart';
 import 'menu_page.dart';
 import 'profile_page.dart';
+import 'place_details_page.dart';
 import '../services/favorites_manager.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
@@ -20,6 +21,7 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
+    // Removed unused _darkMapStyle
   LatLng _currentCenter = const LatLng(37.9838, 23.7275); // Default to Athens
   final double _currentZoom = 13;
   List<StudyPlace> _places = [];
@@ -45,6 +47,17 @@ class _MyHomePageState extends State<MyHomePage> {
     super.initState();
     _speech = stt.SpeechToText();
     _checkLocationPermission();
+  }
+
+
+  void _updateMapStyle() {
+    if (_mapController == null) return;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _updateMapStyle();
   }
 
   @override
@@ -279,8 +292,9 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: const Color(0xFFFFFFFF),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
         children: [
           // 1. Full Screen Map
@@ -312,7 +326,10 @@ class _MyHomePageState extends State<MyHomePage> {
                                 : BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet),
                       ))
                   .toSet(),
-              onMapCreated: (controller) => _mapController = controller,
+              onMapCreated: (controller) {
+                _mapController = controller;
+                _updateMapStyle();
+              },
               onCameraMove: _onCameraMove,
               onTap: (_) {
                 setState(() {
@@ -340,8 +357,8 @@ class _MyHomePageState extends State<MyHomePage> {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Color.fromRGBO(255, 255, 255, 0.9),
-                    Color.fromRGBO(255, 255, 255, 0.0),
+                    colorScheme.surface.withValues(alpha: 0.95),
+                    colorScheme.surface.withValues(alpha: 0.0),
                   ],
                 ),
               ),
@@ -349,17 +366,30 @@ class _MyHomePageState extends State<MyHomePage> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.menu, color: Color(0xFF1D1B20)),
+                    icon: Icon(Icons.menu, color: colorScheme.onSurface),
                     onPressed: () => _openMenu(context),
                   ),
-                  const Text(
-                    'Agora',
-                    style: TextStyle(
-                      fontFamily: 'Roboto',
-                      fontWeight: FontWeight.w400,
-                      fontSize: 22,
-                      color: Color(0xFF1D1B20),
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Image.asset(
+                        'assets/icon/app_icon_bw.png',
+                        height: 32,
+                        width: 32,
+                        fit: BoxFit.contain,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Agora',
+                        style: TextStyle(
+                          fontFamily: 'Roboto',
+                          fontWeight: FontWeight.w400,
+                          fontSize: 22,
+                          color: colorScheme.onSurface,
+                        ),
+                      ),
+                    ],
                   ),
                   GestureDetector(
                     onTap: () {
@@ -367,10 +397,10 @@ class _MyHomePageState extends State<MyHomePage> {
                         MaterialPageRoute(builder: (context) => ProfilePage(onSignOut: widget.onLogout)),
                       );
                     },
-                    child: const CircleAvatar(
+                    child: CircleAvatar(
                       radius: 16,
-                      backgroundColor: Color(0xFFEADDFF),
-                      child: Icon(Icons.person, size: 20, color: Color(0xFF4F378A)),
+                      backgroundColor: colorScheme.primaryContainer,
+                      child: Icon(Icons.person, size: 20, color: colorScheme.primary),
                     ),
                   ),
                 ],
@@ -392,11 +422,11 @@ class _MyHomePageState extends State<MyHomePage> {
               child: Container(
                 height: 56,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFECE6F0),
+                  color: colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(28),
                   boxShadow: [
                     BoxShadow(
-                      color: Color.fromRGBO(0, 0, 0, 0.1),
+                      color: colorScheme.shadow.withValues(alpha: 0.1),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -406,24 +436,24 @@ class _MyHomePageState extends State<MyHomePage> {
                 child: _isSearching
                     ? Row(
                         children: [
-                          const Icon(Icons.search, color: Color(0xFF49454F)),
+                          Icon(Icons.search, color: colorScheme.onSurfaceVariant),
                           const SizedBox(width: 12),
                           Expanded(
                             child: TextField(
                               controller: _searchController,
                               autofocus: true,
                               onChanged: _performSearch,
-                              decoration: const InputDecoration(
+                              decoration: InputDecoration(
                                 hintText: 'Search for a place to study',
                                 border: InputBorder.none,
                                 hintStyle: TextStyle(
-                                  color: Color.fromRGBO(73, 69, 79, 0.8),
+                                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
                                   fontSize: 16,
                                   fontFamily: 'Roboto',
                                 ),
                               ),
-                              style: const TextStyle(
-                                color: Color(0xFF1D1B20),
+                              style: TextStyle(
+                                color: colorScheme.onSurface,
                                 fontSize: 16,
                                 fontFamily: 'Roboto',
                               ),
@@ -431,7 +461,7 @@ class _MyHomePageState extends State<MyHomePage> {
                           ),
                           if (_searchController.text.isNotEmpty)
                             IconButton(
-                              icon: const Icon(Icons.clear, color: Color(0xFF49454F)),
+                              icon: Icon(Icons.clear, color: colorScheme.onSurfaceVariant),
                               onPressed: () {
                                 _searchController.clear();
                                 _performSearch('');
@@ -440,7 +470,7 @@ class _MyHomePageState extends State<MyHomePage> {
                           IconButton(
                             icon: Icon(
                               _isListening ? Icons.mic : Icons.mic_none,
-                              color: _isListening ? Colors.red : const Color(0xFF49454F),
+                              color: _isListening ? Colors.red : colorScheme.onSurfaceVariant,
                             ),
                             onPressed: _isListening ? _stopListening : _startListening,
                           ),
@@ -448,19 +478,19 @@ class _MyHomePageState extends State<MyHomePage> {
                       )
                     : Row(
                         children: [
-                          const Icon(Icons.search, color: Color(0xFF49454F)),
+                          Icon(Icons.search, color: colorScheme.onSurfaceVariant),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
                               'Search for a place to study',
                               style: TextStyle(
-                                color: Color.fromRGBO(73, 69, 79, 0.8),
+                                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
                                 fontSize: 16,
                                 fontFamily: 'Roboto',
                               ),
                             ),
                           ),
-                          const Icon(Icons.mic, color: Color(0xFF49454F)),
+                          Icon(Icons.mic, color: colorScheme.onSurfaceVariant),
                         ],
                       ),
               ),
@@ -473,10 +503,10 @@ class _MyHomePageState extends State<MyHomePage> {
             right: 24,
             child: FloatingActionButton(
               heroTag: 'currentLocation',
-              backgroundColor: Colors.white,
+              backgroundColor: colorScheme.surface,
               elevation: 4,
               onPressed: _centerOnCurrentLocation,
-              child: const Icon(Icons.my_location, color: Color(0xFF6750A4)),
+              child: Icon(Icons.my_location, color: colorScheme.primary),
             ),
           ),
 
@@ -494,26 +524,26 @@ class _MyHomePageState extends State<MyHomePage> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: colorScheme.surface,
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: Color.fromRGBO(0, 0, 0, 0.1),
+                        color: colorScheme.shadow.withValues(alpha: 0.1),
                         blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
                     ],
-                    border: Border.all(color: const Color(0xFFCAC4D0), width: 0.5),
+                    border: Border.all(color: colorScheme.outlineVariant, width: 0.5),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.refresh, size: 16, color: Color(0xFF6750A4)),
+                      Icon(Icons.refresh, size: 16, color: colorScheme.primary),
                       const SizedBox(width: 6),
-                      const Text(
+                      Text(
                         'Search this area',
                         style: TextStyle(
-                          color: Color(0xFF6750A4),
+                          color: colorScheme.primary,
                           fontWeight: FontWeight.w500,
                           fontSize: 13,
                         ),
@@ -538,7 +568,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     elevation: 8,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
-                      side: const BorderSide(color: Color(0xFFD9D9D9), width: 1),
+                      side: BorderSide(color: colorScheme.outlineVariant, width: 1),
                     ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -556,7 +586,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                   fit: BoxFit.cover,
                                   errorBuilder: (context, error, stackTrace) => Container(
                                     height: 160,
-                                    color: const Color(0xFFECE6F0),
+                                    color: colorScheme.surfaceContainerHighest,
                                     child: const Icon(Icons.image_not_supported, size: 40),
                                   ),
                                 ),
@@ -564,11 +594,11 @@ class _MyHomePageState extends State<MyHomePage> {
                             else
                               Container(
                                 height: 160,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFFECE6F0),
-                                  borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+                                decoration: BoxDecoration(
+                                  color: colorScheme.surfaceContainerHighest,
+                                  borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
                                 ),
-                                child: const Center(child: Icon(Icons.place, color: Color(0xFF6750A4), size: 50)),
+                                child: Center(child: Icon(Icons.place, color: colorScheme.primary, size: 50)),
                               ),
                             Positioned(
                               top: 8,
@@ -597,7 +627,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                     child: Container(
                                       padding: const EdgeInsets.all(4),
                                       decoration: BoxDecoration(
-                                        color: Color.fromRGBO(255, 255, 255, 0.8),
+                                        color: colorScheme.surface.withValues(alpha: 0.8),
                                         shape: BoxShape.circle,
                                       ),
                                       child: Icon(
@@ -607,7 +637,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                         size: 18,
                                         color: _favoritesManager.isFavorite(_selectedPlace!)
                                           ? Colors.red
-                                          : Colors.black,
+                                          : colorScheme.onSurface,
                                       ),
                                     ),
                                   ),
@@ -618,10 +648,10 @@ class _MyHomePageState extends State<MyHomePage> {
                                     child: Container(
                                       padding: const EdgeInsets.all(4),
                                       decoration: BoxDecoration(
-                                        color: Color.fromRGBO(255, 255, 255, 0.8),
+                                        color: colorScheme.surface.withValues(alpha: 0.8),
                                         shape: BoxShape.circle,
                                       ),
-                                      child: const Icon(Icons.close, size: 18, color: Colors.black),
+                                      child: Icon(Icons.close, size: 18, color: colorScheme.onSurface),
                                     ),
                                   ),
                                 ],
@@ -636,24 +666,24 @@ class _MyHomePageState extends State<MyHomePage> {
                             children: [
                               Text(
                                 _selectedPlace!.name,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w400,
-                                  color: Color(0xFF1E1E1E),
+                                  color: colorScheme.onSurface,
                                   fontFamily: 'Inter',
                                 ),
                               ),
                               const SizedBox(height: 4),
                               Row(
                                 children: [
-                                  const Icon(Icons.star, size: 16, color: Color(0xFF1D1B20)),
+                                  Icon(Icons.star, size: 16, color: colorScheme.onSurface),
                                   const SizedBox(width: 4),
                                   Text(
                                     '${_selectedPlace!.rating ?? "N/A"}(${_selectedPlace!.userRatingsTotal ?? 0} Reviews)',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w600,
-                                      color: Color(0xFF1E1E1E),
+                                      color: colorScheme.onSurface,
                                       fontFamily: 'Inter',
                                     ),
                                   ),
@@ -662,17 +692,20 @@ class _MyHomePageState extends State<MyHomePage> {
                               const SizedBox(height: 12),
                               GestureDetector(
                                 onTap: () {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('Checked in to ${_selectedPlace!.name}')),
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (context) => PlaceDetailsPage(place: _selectedPlace!),
+                                    ),
                                   );
                                 },
-                                child: const Text(
-                                  'Check - in',
+                                child: Text(
+                                  'View Details',
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w500,
-                                    color: Colors.black,
+                                    color: colorScheme.primary,
                                     fontFamily: 'Roboto',
+                                    decoration: TextDecoration.underline,
                                   ),
                                 ),
                               ),
@@ -695,11 +728,11 @@ class _MyHomePageState extends State<MyHomePage> {
               child: Container(
                 constraints: const BoxConstraints(maxHeight: 400),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: colorScheme.surface,
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color.fromRGBO(0, 0, 0, 0.2),
+                      color: colorScheme.shadow.withValues(alpha: 0.2),
                       blurRadius: 12,
                       offset: const Offset(0, 4),
                     ),
@@ -717,19 +750,20 @@ class _MyHomePageState extends State<MyHomePage> {
                             : place.type.toLowerCase().contains('library')
                                 ? Icons.menu_book
                                 : Icons.work,
-                        color: const Color(0xFF6750A4),
+                        color: colorScheme.primary,
                       ),
                       title: Text(
                         place.name,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 16,
+                          color: colorScheme.onSurface,
                         ),
                       ),
                       subtitle: Text(
                         place.type,
-                        style: const TextStyle(
-                          color: Color(0xFF6B7280),
+                        style: TextStyle(
+                          color: colorScheme.onSurfaceVariant,
                           fontSize: 14,
                         ),
                       ),
@@ -741,21 +775,19 @@ class _MyHomePageState extends State<MyHomePage> {
                                 const SizedBox(width: 4),
                                 Text(
                                   place.rating!.toStringAsFixed(1),
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontWeight: FontWeight.w600,
+                                    color: colorScheme.onSurface,
                                   ),
                                 ),
                               ],
                             )
                           : null,
                       onTap: () {
-                        setState(() {
-                          _selectedPlace = place;
-                          _isSearching = false;
-                          _searchController.clear();
-                        });
-                        _mapController?.animateCamera(
-                          CameraUpdate.newLatLng(place.location),
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => PlaceDetailsPage(place: place),
+                          ),
                         );
                       },
                     );
@@ -766,8 +798,8 @@ class _MyHomePageState extends State<MyHomePage> {
 
           // 8. Loading Indicator
           if (_loading)
-            const Center(
-              child: CircularProgressIndicator(color: Color(0xFF6750A4)),
+            Center(
+              child: CircularProgressIndicator(color: colorScheme.primary),
             ),
           if (_error != null)
             Positioned(
@@ -775,13 +807,13 @@ class _MyHomePageState extends State<MyHomePage> {
               left: 16,
               right: 16,
               child: Material(
-                color: Color.fromRGBO(255, 0, 0, 0.7),
+                color: colorScheme.errorContainer.withValues(alpha: 0.9),
                 borderRadius: BorderRadius.circular(8),
                 child: Padding(
                   padding: const EdgeInsets.all(8.0),
                   child: Text(
                     _error!,
-                    style: const TextStyle(color: Colors.white),
+                    style: TextStyle(color: colorScheme.onErrorContainer),
                   ),
                 ),
               ),
