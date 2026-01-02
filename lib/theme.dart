@@ -25,7 +25,7 @@ ThemeData buildLightTheme() {
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: colorScheme.surfaceContainerHighest,
-      hintStyle: TextStyle(color: colorScheme.onSurfaceVariant.withOpacity(0.8)),
+      hintStyle: TextStyle(color: colorScheme.onSurfaceVariant.withAlpha((0.8 * 255).round())),
       labelStyle: TextStyle(color: colorScheme.onSurface),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -55,7 +55,7 @@ ThemeData buildLightTheme() {
     ),
     textSelectionTheme: TextSelectionThemeData(
       cursorColor: colorScheme.primary,
-      selectionColor: colorScheme.primary.withOpacity(0.3),
+      selectionColor: colorScheme.primary.withAlpha((0.3 * 255).round()),
       selectionHandleColor: colorScheme.primary,
     ),
   );
@@ -84,7 +84,7 @@ ThemeData buildDarkTheme() {
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: colorScheme.surfaceContainerHighest,
-      hintStyle: TextStyle(color: colorScheme.onSurfaceVariant.withOpacity(0.85)),
+      hintStyle: TextStyle(color: colorScheme.onSurfaceVariant.withAlpha((0.85 * 255).round())),
       labelStyle: TextStyle(color: colorScheme.onSurface),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -126,7 +126,7 @@ ThemeData buildDarkTheme() {
     ),
     textSelectionTheme: TextSelectionThemeData(
       cursorColor: colorScheme.primary,
-      selectionColor: colorScheme.primary.withOpacity(0.25),
+      selectionColor: colorScheme.primary.withAlpha((0.25 * 255).round()),
       selectionHandleColor: colorScheme.primary,
     ),
   );

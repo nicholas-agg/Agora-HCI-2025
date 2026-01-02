@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../services/theme_manager.dart';
@@ -43,7 +44,12 @@ class MenuPage extends StatelessWidget {
                   subtitle: const Text('Toggle between light and dark theme'),
                   value: themeManager.themeMode == ThemeMode.dark,
                   onChanged: (val) {
-                    themeManager.setTheme(val ? ThemeMode.dark : ThemeMode.light);
+                    // Immediate haptic feedback for instant user response
+                    HapticFeedback.lightImpact();
+                    // Theme change happens asynchronously
+                    Future.microtask(() {
+                      themeManager.setTheme(val ? ThemeMode.dark : ThemeMode.light);
+                    });
                   },
                   secondary: Icon(
                     themeManager.themeMode == ThemeMode.dark ? Icons.dark_mode : Icons.light_mode,

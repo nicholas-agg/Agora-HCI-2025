@@ -1,51 +1,183 @@
 import 'package:flutter/material.dart';
+import 'services/auth_service.dart';
 
 class LoginPage extends StatefulWidget {
-  final void Function(String) onLogin;
-  const LoginPage({super.key, required this.onLogin});
+  const LoginPage({super.key});
 
   @override
   State<LoginPage> createState() => _LoginPageState();
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final TextEditingController _usernameController = TextEditingController();
+  final AuthService _authService = AuthService();
+  final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _nameController = TextEditingController();
   bool _loading = false;
   String? _error;
+  bool _isSignUp = false; // Toggle between sign in and sign up
 
-  void _handleLogin() async {
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  void _handleAuth() async {
+    if (!mounted) return;
+    
     setState(() {
       _loading = true;
       _error = null;
     });
-    // Simulate login delay
-    await Future.delayed(const Duration(seconds: 1));
-    
-    final username = _usernameController.text.trim();
+
+    var email = _emailController.text.trim();
     final password = _passwordController.text.trim();
-    
-    if (username.isEmpty || password.isEmpty) {
+    final name = _nameController.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
+      if (!mounted) return;
       setState(() {
-        _error = 'Please enter both username and password.';
+        _error = 'Please enter both email and password.';
         _loading = false;
       });
       return;
     }
-    
-    // Validate demo user credentials
-    if (username.toLowerCase() == 'demo') {
-      if (password == 'demo') {
-        widget.onLogin(username);
+
+    if (_isSignUp && name.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Please enter your name.';
+        _loading = false;
+      });
+      return;
+    }
+
+    // Convert demo username to valid email for Firebase compatibility
+    final isDemoLogin = email.toLowerCase() == 'demo';
+    if (isDemoLogin) {
+      email = 'demo@agora.com';
+    }
+
+    try {
+      if (_isSignUp) {
+        await _authService.signUp(
+          email: email,
+          password: password,
+          displayName: name,
+        );
       } else {
-        setState(() {
-          _error = 'Invalid password for demo user.';
-          _loading = false;
-        });
+        try {
+          await _authService.signIn(
+            email: email,
+            password: password,
+          );
+        } on Exception catch (signInError) {
+          // If demo login fails, automatically create the demo account
+          if (isDemoLogin && (signInError.toString().contains('ERROR_INVALID_CREDENTIAL') || 
+              signInError.toString().contains('incorrect') || 
+              signInError.toString().contains('malformed') ||
+              signInError.toString().contains('expired'))) {
+            try {
+              await _authService.signUp(
+                email: email,
+                password: password,
+                displayName: 'Demo User',
+              );
+              // Auto-created demo account, now signed in
+              return;
+            } on Exception {
+              // If signup also fails, show error
+              if (!mounted) return;
+              setState(() {
+                _error = 'Invalid credentials. Please check your password.';
+                _loading = false;
+              });
+              return;
+            }
+          } else {
+            rethrow;
+          }
+        }
       }
-    } else {
-      // For other users, accept any non-empty credentials for now
-      widget.onLogin(username);
+      // Navigation is handled automatically by StreamBuilder in main.dart
+    } on Exception catch (e) {
+      if (!mounted) return;
+      
+      // Extract user-friendly error message
+      String errorMessage = e.toString().toLowerCase();
+      String displayMessage;
+      
+      if (errorMessage.contains('invalid') && (errorMessage.contains('credential') || errorMessage.contains('password'))) {
+        displayMessage = 'Invalid email or password.';
+      } else if (errorMessage.contains('user-not-found') || errorMessage.contains('user not found')) {
+        displayMessage = 'No account found with this email.';
+      } else if (errorMessage.contains('wrong-password') || errorMessage.contains('incorrect')) {
+        displayMessage = 'Incorrect password.';
+      } else if (errorMessage.contains('email-already-in-use') || errorMessage.contains('already exists')) {
+        displayMessage = 'An account already exists with this email.';
+      } else if (errorMessage.contains('weak-password') || errorMessage.contains('too weak')) {
+        displayMessage = 'Password is too weak. Use at least 6 characters.';
+      } else if (errorMessage.contains('invalid-email') || errorMessage.contains('badly formatted')) {
+        displayMessage = 'Invalid email address format.';
+      } else if (errorMessage.contains('network') || errorMessage.contains('connection')) {
+        displayMessage = 'Network error. Please check your connection.';
+      } else if (errorMessage.contains('too-many-requests')) {
+        displayMessage = 'Too many attempts. Please try again later.';
+      } else {
+        displayMessage = 'Authentication failed. Please try again.';
+      }
+      
+      setState(() {
+        _error = displayMessage;
+        _loading = false;
+      });
+    } catch (e) {
+      // Catch any other unexpected errors
+      if (!mounted) return;
+      setState(() {
+        _error = 'An unexpected error occurred. Please try again.';
+        _loading = false;
+      });
+    }
+  }
+
+  void _handleForgotPassword() async {
+    final email = _emailController.text.trim();
+    
+    if (email.isEmpty) {
+      setState(() {
+        _error = 'Please enter your email address.';
+      });
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      await _authService.sendPasswordResetEmail(email);
+      if (!mounted) return;
+      
+      setState(() {
+        _loading = false;
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Password reset email sent. Please check your inbox.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
     }
   }
 
@@ -81,7 +213,7 @@ class _LoginPageState extends State<LoginPage> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          'Sign In',
+                          _isSignUp ? 'Sign Up' : 'Sign In',
                           style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                                 fontWeight: FontWeight.bold,
                                 color: colorScheme.primary,
@@ -90,14 +222,31 @@ class _LoginPageState extends State<LoginPage> {
                               ),
                         ),
                         const SizedBox(height: 28),
+                        
+                        // Name field (only for sign up)
+                        if (_isSignUp) ...[
+                          TextField(
+                            controller: _nameController,
+                            decoration: InputDecoration(
+                              labelText: 'Name',
+                              prefixIcon: Icon(Icons.person, color: colorScheme.primary),
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                        ],
+                        
+                        // Email field
                         TextField(
-                          controller: _usernameController,
+                          controller: _emailController,
+                          keyboardType: TextInputType.emailAddress,
                           decoration: InputDecoration(
-                            labelText: 'Username',
-                            prefixIcon: Icon(Icons.person, color: colorScheme.primary),
+                            labelText: 'Email',
+                            prefixIcon: Icon(Icons.email, color: colorScheme.primary),
                           ),
                         ),
                         const SizedBox(height: 18),
+                        
+                        // Password field
                         TextField(
                           controller: _passwordController,
                           obscureText: true,
@@ -106,27 +255,88 @@ class _LoginPageState extends State<LoginPage> {
                             prefixIcon: Icon(Icons.lock, color: colorScheme.primary),
                           ),
                         ),
-                        const SizedBox(height: 28),
+                        
+                        // Forgot password link (only for sign in)
+                        if (!_isSignUp) ...[
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(
+                              onPressed: _loading ? null : _handleForgotPassword,
+                              child: Text(
+                                'Forgot Password?',
+                                style: TextStyle(
+                                  color: colorScheme.primary,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                        
+                        const SizedBox(height: 20),
+                        
+                        // Sign in/up button
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
-                            onPressed: _loading ? null : _handleLogin,
+                            onPressed: _loading ? null : _handleAuth,
                             child: _loading
                                 ? const SizedBox(
                                     height: 26,
                                     width: 26,
-                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
                                   )
-                                : const Text('Sign In'),
+                                : Text(_isSignUp ? 'Sign Up' : 'Sign In'),
                           ),
                         ),
+                        
+                        // Error message
                         if (_error != null) ...[
                           const SizedBox(height: 18),
                           Text(
                             _error!,
-                            style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w500),
+                            style: const TextStyle(
+                              color: Colors.red,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            textAlign: TextAlign.center,
                           ),
                         ],
+                        
+                        // Toggle between sign in and sign up
+                        const SizedBox(height: 20),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              _isSignUp
+                                  ? 'Already have an account?'
+                                  : "Don't have an account?",
+                              style: TextStyle(
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                setState(() {
+                                  _isSignUp = !_isSignUp;
+                                  _error = null;
+                                });
+                              },
+                              child: Text(
+                                _isSignUp ? 'Sign In' : 'Sign Up',
+                                style: TextStyle(
+                                  color: colorScheme.primary,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ),

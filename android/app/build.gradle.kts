@@ -1,9 +1,22 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
+    // START: FlutterFire Configuration
+    id("com.google.gms.google-services")
+    // END: FlutterFire Configuration
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+val envFile = rootProject.file("../.env")
+val env = Properties()
+if (envFile.exists()) {
+    env.load(FileInputStream(envFile))
+}
+val mapsApiKey = env.getProperty("GOOGLE_MAPS_API_KEY") ?: System.getenv("GOOGLE_MAPS_API_KEY") ?: "YOUR_API_KEY_HERE"
 
 android {
     namespace = "com.example.agora"
@@ -13,6 +26,10 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    tasks.withType<JavaCompile> {
+        options.compilerArgs.add("-Xlint:-options")
     }
 
     kotlinOptions {
@@ -29,7 +46,7 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         manifestPlaceholders.putAll(
-            mapOf("mapsApiKey" to (System.getenv("GOOGLE_MAPS_API_KEY") ?: "YOUR_API_KEY_HERE"))
+            mapOf("mapsApiKey" to mapsApiKey)
         )
     }
 

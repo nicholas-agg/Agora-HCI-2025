@@ -49,16 +49,13 @@ class _MyHomePageState extends State<MyHomePage> {
     _checkLocationPermission();
   }
 
+  // Map styling is now handled via Google Cloud Map IDs
+  // No need for manual style application
 
-  void _updateMapStyle() {
-    if (_mapController == null) return;
-  }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _updateMapStyle();
-  }
+  // _updateMapStyle is no longer needed; style is set in onMapCreated
+
+  // didChangeDependencies override removed
 
   @override
   void dispose() {
@@ -283,12 +280,6 @@ class _MyHomePageState extends State<MyHomePage> {
     return 'https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=$photoReference&key=$apiKey';
   }
 
-  void _onCameraMove(CameraPosition position) {
-    // Only update _currentCenter without setState to avoid excessive rebuilds
-    _currentCenter = position.target;
-    // If you want to update zoom, do it here without setState
-    // _currentZoom = position.zoom;
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -297,13 +288,22 @@ class _MyHomePageState extends State<MyHomePage> {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
         children: [
-          // 1. Full Screen Map
+          // 1. Full Screen Map with smooth transition
           Positioned.fill(
-            child: GoogleMap(
-              initialCameraPosition: CameraPosition(
-                target: _currentCenter,
-                zoom: _currentZoom,
-              ),
+            child: Builder(
+              builder: (context) {
+                final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+                return AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 400),
+                  switchInCurve: Curves.easeIn,
+                  switchOutCurve: Curves.easeOut,
+                  child: GoogleMap(
+                    key: ValueKey(isDarkMode), // Key ensures AnimatedSwitcher detects the change
+                    cloudMapId: isDarkMode ? '2f87b85e986833829e30b116' : null,
+                    initialCameraPosition: CameraPosition(
+                      target: _currentCenter,
+                      zoom: _currentZoom,
+                    ),
               myLocationEnabled: true,
               myLocationButtonEnabled: false,
               zoomControlsEnabled: false,
@@ -328,15 +328,15 @@ class _MyHomePageState extends State<MyHomePage> {
                   .toSet(),
               onMapCreated: (controller) {
                 _mapController = controller;
-                _updateMapStyle();
               },
-              onCameraMove: _onCameraMove,
               onTap: (_) {
                 setState(() {
                   _selectedPlace = null;
                 });
               },
-              padding: const EdgeInsets.only(top: 160, bottom: 100), // Adjust for overlays
+                  ),
+                );
+              },
             ),
           ),
 
@@ -613,6 +613,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                       if (!mounted) return;
                                       setState(() {});
                                       final isFavorite = _favoritesManager.isFavorite(_selectedPlace!);
+                                      if (!mounted) return;
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         SnackBar(
                                           content: Text(

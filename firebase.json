@@ -1,0 +1,25 @@
+{
+    "flutter": {
+        "platforms": {
+            "android": {
+                "default": {
+                    "projectId": "agora-hci-2025",
+                    "appId": "1:631736958664:android:a2d30a491657dd640eaffd",
+                    "fileOutput": "android/app/google-services.json"
+                }
+            },
+            "dart": {
+                "lib/firebase_options.dart": {
+                    "projectId": "agora-hci-2025",
+                    "configurations": {
+                        "android": "1:631736958664:android:a2d30a491657dd640eaffd",
+                        "ios": "1:631736958664:ios:ef62323ad7a597fd0eaffd",
+                        "macos": "1:631736958664:ios:ef62323ad7a597fd0eaffd",
+                        "web": "1:631736958664:web:c22b842843f4b0350eaffd",
+                        "windows": "1:631736958664:web:91ad5bcaf82799e30eaffd"
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,14 +1,67 @@
 import 'package:flutter/material.dart';
+import '../services/auth_service.dart';
+import '../services/database_service.dart';
 import 'privacy_page.dart';
 import 'help_support_page.dart';
+import 'favorites_page.dart';
 
-class ProfilePage extends StatelessWidget {
+class ProfilePage extends StatefulWidget {
   final VoidCallback? onSignOut;
   const ProfilePage({super.key, this.onSignOut});
 
   @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> {
+  final AuthService _authService = AuthService();
+  final DatabaseService _databaseService = DatabaseService();
+  int _favoriteCount = 0;
+  int _reviewCount = 0;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserStats();
+  }
+
+  Future<void> _loadUserStats() async {
+    final user = _authService.currentUser;
+    if (user == null) return;
+
+    try {
+      final favoriteCount = await _databaseService.getFavoriteCount(user.uid);
+      final reviewCount = await _databaseService.getUserReviewCount(user.uid);
+      
+      if (mounted) {
+        setState(() {
+          _favoriteCount = favoriteCount;
+          _reviewCount = reviewCount;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final user = _authService.currentUser;
+    
+    if (user == null) {
+      return Scaffold(
+        body: Center(
+          child: Text('No user logged in'),
+        ),
+      );
+    }
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
@@ -47,9 +100,22 @@ class ProfilePage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Demo User', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: colorScheme.onSurface)),
+                      Text(
+                        user.displayName ?? 'User',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w600,
+                          color: colorScheme.onSurface,
+                        ),
+                      ),
                       const SizedBox(height: 4),
-                      Text('demo@agora.com', style: TextStyle(fontSize: 15, color: colorScheme.onSurfaceVariant)),
+                      Text(
+                        user.email ?? '',
+                        style: TextStyle(
+                          fontSize: 15,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -81,13 +147,13 @@ class ProfilePage extends StatelessWidget {
                   child: ListTile(
                     leading: const Icon(Icons.person_outline, color: Color(0xFF6750A4)),
                     title: const Text('Account Info', style: TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: const Text('Demo User\ndemo@agora.com'),
+                    subtitle: Text('${user.displayName ?? "User"}\n${user.email ?? ""}'),
                     onTap: () {
                       showDialog(
                         context: context,
                         builder: (context) => AlertDialog(
                           title: const Text('Account Info'),
-                          content: const Text('Name: Demo User\nEmail: demo@agora.com'),
+                          content: Text('Name: ${user.displayName ?? "User"}\nEmail: ${user.email ?? ""}'),
                           actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))],
                         ),
                       );
@@ -101,14 +167,29 @@ class ProfilePage extends StatelessWidget {
                   child: ListTile(
                     leading: const Icon(Icons.bookmark, color: Color(0xFF6750A4)),
                     title: const Text('Favourites', style: TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: const Text('No favourites in demo'),
+                    subtitle: _loading
+                        ? const Text('Loading...')
+                        : Text('$_favoriteCount favourite${_favoriteCount == 1 ? '' : 's'}'),
+                    trailing: !_loading && _favoriteCount > 0
+                        ? Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: colorScheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '$_favoriteCount',
+                              style: TextStyle(
+                                color: colorScheme.primary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          )
+                        : null,
                     onTap: () {
-                      showDialog(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Favourites'),
-                          content: const Text('No favourites for demo user.'),
-                          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))],
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => FavoritesPage(),
                         ),
                       );
                     },
@@ -167,7 +248,25 @@ class ProfilePage extends StatelessWidget {
                   child: ListTile(
                     leading: const Icon(Icons.reviews_outlined, color: Color(0xFF6750A4)),
                     title: const Text('Reviews', style: TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: const Text('No reviews in demo'),
+                    subtitle: _loading
+                        ? const Text('Loading...')
+                        : Text('$_reviewCount review${_reviewCount == 1 ? '' : 's'}'),
+                    trailing: !_loading && _reviewCount > 0
+                        ? Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: colorScheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '$_reviewCount',
+                              style: TextStyle(
+                                color: colorScheme.primary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          )
+                        : null,
                     onTap: () {},
                   ),
                 ),
@@ -179,7 +278,6 @@ class ProfilePage extends StatelessWidget {
                     leading: const Icon(Icons.help_outline, color: Color(0xFF6750A4)),
                     title: const Text('Help & Support', style: TextStyle(fontWeight: FontWeight.w600)),
                     subtitle: const Text('Get help and contact us'),
-                    trailing: const Icon(Icons.more_vert, color: Color(0xFF49454F)),
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(builder: (context) => const HelpSupportPage()),
@@ -195,13 +293,10 @@ class ProfilePage extends StatelessWidget {
                   child: ListTile(
                     leading: const Icon(Icons.logout, color: Color(0xFFDC2626)),
                     title: const Text('Sign Out', style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFFDC2626))),
-                    onTap: () {
-                      if (onSignOut != null) {
-                        // Pop all routes and call onSignOut to trigger login page
-                        Navigator.of(context).popUntil((route) => route.isFirst);
-                        onSignOut!();
-                      } else {
-                        Navigator.of(context).maybePop();
+                    onTap: () async {
+                      if (widget.onSignOut != null) {
+                        await _authService.signOut();
+                        widget.onSignOut!();
                       }
                     },
                   ),

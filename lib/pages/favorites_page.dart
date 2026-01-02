@@ -15,35 +15,55 @@ class _FavoritesPageState extends State<FavoritesPage> {
   String _selectedFilter = 'All';
   final TextEditingController _searchController = TextEditingController();
   final _favoritesManager = FavoritesManager();
-  
+  bool _initLoading = true;
+  late VoidCallback _listener;
+
   List<StudyPlace> get _allFavorites => _favoritesManager.favorites;
 
   List<StudyPlace> get _filteredFavorites {
     List<StudyPlace> filtered = _allFavorites;
-    
     if (_selectedFilter != 'All') {
       filtered = filtered.where((place) {
+        final type = place.type.toLowerCase();
         if (_selectedFilter == 'Libraries') {
-          return place.type.toLowerCase().contains('library');
+          return type.contains('library');
         } else if (_selectedFilter == 'Cafeterias') {
-          return place.type.toLowerCase().contains('cafe') || 
-                 place.type.toLowerCase().contains('cafeteria');
+          return type.contains('cafe') || type.contains('cafeteria');
+        } else if (_selectedFilter == 'CoWorking') {
+          return type.contains('coworking');
         }
         return true;
       }).toList();
     }
-    
     if (_searchController.text.isNotEmpty) {
       filtered = filtered.where((place) =>
         place.name.toLowerCase().contains(_searchController.text.toLowerCase())
       ).toList();
     }
-    
     return filtered;
   }
 
   @override
+  void initState() {
+    super.initState();
+    _listener = () {
+      if (mounted) setState(() {});
+    };
+    _favoritesManager.addListener(_listener);
+    _initFavorites();
+  }
+
+  Future<void> _initFavorites() async {
+    await _favoritesManager.initialize();
+    if (!mounted) return;
+    setState(() {
+      _initLoading = false;
+    });
+  }
+
+  @override
   void dispose() {
+    _favoritesManager.removeListener(_listener);
     _searchController.dispose();
     super.dispose();
   }
@@ -105,6 +125,11 @@ class _FavoritesPageState extends State<FavoritesPage> {
       ),
       body: Column(
         children: [
+          if (_initLoading)
+            const Padding(
+              padding: EdgeInsets.all(16.0),
+              child: LinearProgressIndicator(),
+            ),
           // Search Bar
           Container(
             color: colorScheme.surface,
@@ -132,14 +157,19 @@ class _FavoritesPageState extends State<FavoritesPage> {
           Container(
             color: colorScheme.surface,
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            child: Row(
-              children: [
-                _buildFilterChip('All', Icons.stars, colorScheme),
-                const SizedBox(width: 8),
-                _buildFilterChip('Libraries', Icons.menu_book, colorScheme),
-                const SizedBox(width: 8),
-                _buildFilterChip('Cafeterias', Icons.local_cafe, colorScheme),
-              ],
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _buildFilterChip('All', Icons.stars, colorScheme),
+                  const SizedBox(width: 8),
+                  _buildFilterChip('Libraries', Icons.menu_book, colorScheme),
+                  const SizedBox(width: 8),
+                  _buildFilterChip('Cafeterias', Icons.local_cafe, colorScheme),
+                  const SizedBox(width: 8),
+                  _buildFilterChip('CoWorking', Icons.business_center, colorScheme),
+                ],
+              ),
             ),
           ),
 
@@ -273,14 +303,25 @@ class _FavoritesPageState extends State<FavoritesPage> {
                     shape: BoxShape.circle,
                   ),
                   child: IconButton(
-                    icon: const Icon(Icons.favorite, color: Colors.red),
-                    onPressed: () {
-                      setState(() {
-                        _favoritesManager.removeFavorite(place);
-                      });
+                    icon: Icon(
+                      _favoritesManager.isFavorite(place)
+                        ? Icons.favorite
+                        : Icons.favorite_border,
+                      color: _favoritesManager.isFavorite(place)
+                        ? Colors.red
+                        : Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    onPressed: () async {
+                      await _favoritesManager.toggleFavorite(place);
+                      // Wait a short moment for cloud sync to update local list
+                      await Future.delayed(const Duration(milliseconds: 300));
+                      setState(() {});
+                      final isNowFavorite = _favoritesManager.isFavorite(place);
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('${place.name} removed from favorites'),
+                          content: Text(isNowFavorite
+                            ? '${place.name} added to favorites'
+                            : '${place.name} removed from favorites'),
                           duration: const Duration(seconds: 2),
                         ),
                       );
