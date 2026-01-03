@@ -11,6 +11,8 @@ import '../services/favorites_manager.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'dart:math';
+import 'package:provider/provider.dart';
+import '../services/theme_manager.dart';
 
 class MyHomePage extends StatefulWidget {
   final VoidCallback onLogout;
@@ -464,11 +466,16 @@ class _MyHomePageState extends State<MyHomePage> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Image.asset(
-                        'assets/icon/app_icon_bw.png',
-                        height: 32,
-                        width: 32,
-                        fit: BoxFit.contain,
+                      Consumer<ThemeManager>(
+                        builder: (context, themeManager, _) {
+                          return Image.asset(
+                            themeManager.themeMode == ThemeMode.light
+                                ? 'assets/icon/app_icon_black.png'
+                                : 'assets/icon/app_icon_bw.png',
+                            height: 32,
+                            width: 32,
+                          );
+                        },
                       ),
                       const SizedBox(width: 8),
                       Text(

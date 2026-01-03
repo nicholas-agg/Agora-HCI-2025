@@ -5,6 +5,8 @@ import '../services/favorites_manager.dart';
 import 'privacy_page.dart';
 import 'help_support_page.dart';
 import 'favorites_page.dart';
+import 'my_reviews_page.dart';
+import 'edit_profile_page.dart';
 
 class ProfilePage extends StatefulWidget {
   final VoidCallback? onSignOut;
@@ -21,16 +23,40 @@ class _ProfilePageState extends State<ProfilePage> {
   int _favoriteCount = 0;
   int _reviewCount = 0;
   bool _loading = true;
+  VoidCallback _favoritesListener = () {};
 
   @override
   void initState() {
     super.initState();
+    _favoritesListener = () {
+      if (mounted) {
+        setState(() {
+          _favoriteCount = _favoritesManager.favorites.length;
+        });
+      }
+    };
+    _favoritesManager.addListener(_favoritesListener);
+    // Do not call _syncAndLoadUserStats here; will be called in didChangeDependencies
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // This is called every time the widget becomes visible in the navigation stack
     _syncAndLoadUserStats();
+  }
+
+  @override
+  void dispose() {
+    // Do not use context for ancestor lookups here!
+    _favoritesManager.removeListener(_favoritesListener);
+    super.dispose();
   }
 
   Future<void> _syncAndLoadUserStats() async {
     // Force sync favorites from Firebase first
     await _favoritesManager.forceSync();
+    _favoriteCount = _favoritesManager.favorites.length;
     await _loadUserStats();
   }
 
@@ -130,12 +156,9 @@ class _ProfilePageState extends State<ProfilePage> {
                 IconButton(
                   icon: Icon(Icons.edit, color: colorScheme.primary),
                   onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('Edit Profile'),
-                        content: const Text('Profile editing is not available in demo.'),
-                        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))],
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => EditProfilePage(),
                       ),
                     );
                   },
@@ -275,7 +298,13 @@ class _ProfilePageState extends State<ProfilePage> {
                             ),
                           )
                         : null,
-                    onTap: () {},
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => MyReviewsPage(),
+                        ),
+                      );
+                    },
                   ),
                 ),
                 Card(

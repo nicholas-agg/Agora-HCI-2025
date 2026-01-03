@@ -68,6 +68,27 @@ class _LoginPageState extends State<LoginPage> {
           password: password,
           displayName: name,
         );
+        // Show success message and prompt to verify email
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _error = null;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Account created! Please check your email to verify your account before signing in.'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 5),
+          ),
+        );
+        // Switch to sign-in view
+        setState(() {
+          _isSignUp = false;
+          _emailController.clear();
+          _passwordController.clear();
+          _nameController.clear();
+        });
+        return;
       } else {
         try {
           await _authService.signIn(
@@ -79,20 +100,34 @@ class _LoginPageState extends State<LoginPage> {
           if (isDemoLogin && (signInError.toString().contains('ERROR_INVALID_CREDENTIAL') || 
               signInError.toString().contains('incorrect') || 
               signInError.toString().contains('malformed') ||
-              signInError.toString().contains('expired'))) {
+              signInError.toString().contains('expired') ||
+              signInError.toString().contains('user not found') ||
+              signInError.toString().contains('user-not-found'))) {
             try {
               await _authService.signUp(
                 email: email,
                 password: password,
                 displayName: 'Demo User',
               );
-              // Auto-created demo account, now signed in
+              // Demo account created, but user must verify email before accessing app
+              if (!mounted) return;
+              setState(() {
+                _loading = false;
+                _error = null;
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Demo account created! Please check your email to verify before signing in.'),
+                  backgroundColor: Colors.green,
+                  duration: Duration(seconds: 5),
+                ),
+              );
               return;
-            } on Exception {
+            } on Exception catch (signUpError) {
               // If signup also fails, show error
               if (!mounted) return;
               setState(() {
-                _error = 'Invalid credentials. Please check your password.';
+                _error = 'Failed to create demo account: ${signUpError.toString()}';
                 _loading = false;
               });
               return;
@@ -138,7 +173,7 @@ class _LoginPageState extends State<LoginPage> {
       // Catch any other unexpected errors
       if (!mounted) return;
       setState(() {
-        _error = 'An unexpected error occurred. Please try again.';
+        _error = 'An unexpected error occurred: ${e.toString()}';
         _loading = false;
       });
     }

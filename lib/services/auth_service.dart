@@ -28,6 +28,9 @@ class AuthService {
       // Update display name
       await credential.user?.updateDisplayName(displayName);
 
+      // Send email verification
+      await credential.user?.sendEmailVerification();
+
       // Create user document in Firestore
       final appUser = AppUser(
         uid: credential.user!.uid,
@@ -41,11 +44,22 @@ class AuthService {
           .doc(credential.user!.uid)
           .set(appUser.toFirestore());
 
+      // Sign out user so they must verify email before accessing the app
+      await _auth.signOut();
+
       return appUser;
     } on FirebaseAuthException catch (e) {
       throw _handleAuthException(e);
     } catch (e) {
       throw Exception('Failed to sign up: $e');
+    }
+  }
+
+  // Resend email verification
+  Future<void> sendEmailVerification() async {
+    final user = _auth.currentUser;
+    if (user != null && !user.emailVerified) {
+      await user.sendEmailVerification();
     }
   }
 
@@ -59,6 +73,13 @@ class AuthService {
         email: email,
         password: password,
       );
+
+      // Block sign-in if email is not verified
+      if (!(credential.user?.emailVerified ?? false)) {
+        await credential.user?.sendEmailVerification();
+        await _auth.signOut();
+        throw Exception('Please verify your email address before signing in. A verification email has been sent.');
+      }
 
       // Get user data from Firestore
       final doc = await _firestore

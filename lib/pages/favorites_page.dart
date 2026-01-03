@@ -315,18 +315,17 @@ class _FavoritesPageState extends State<FavoritesPage> {
                     ),
                     onPressed: () async {
                       final rootContext = context;
+                      final wasFavorite = _favoritesManager.isFavorite(place);
                       await _favoritesManager.toggleFavorite(place);
-                      // Wait a short moment for cloud sync to update local list
-                      await Future.delayed(const Duration(milliseconds: 300));
                       if (!mounted) return;
                       setState(() {});
-                      final isNowFavorite = _favoritesManager.isFavorite(place);
                       if (!rootContext.mounted) return;
                       ScaffoldMessenger.of(rootContext).showSnackBar(
                         SnackBar(
-                          content: Text(isNowFavorite
-                            ? '${place.name} added to favorites'
-                            : '${place.name} removed from favorites'),
+                          content: Text(
+                            wasFavorite
+                              ? '${place.name} removed from favorites'
+                              : '${place.name} added to favorites'),
                           duration: const Duration(seconds: 2),
                         ),
                       );

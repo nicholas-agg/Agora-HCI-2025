@@ -79,6 +79,7 @@ flutter:
     - .env
     - assets/icon/app_icon.png
     - assets/icon/app_icon_bw.png
+    - assets/icon/app_icon_black.png
     - assets/map_style_dark.json
 
   # An image asset can refer to one or more resolution-specific "variants", see
