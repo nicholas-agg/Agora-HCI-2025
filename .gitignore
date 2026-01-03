@@ -80,3 +80,15 @@ generated_plugin_registrant.dart
 crashlytics/
 firebase-debug.log
 
+# Service account keys
+serviceAccountKey.json
+*.service-account.json
+client_secret_*.json
+
+# iOS build files
+*.p12
+*.mobileprovision
+
+# Firebase files
+.firebase/
+
