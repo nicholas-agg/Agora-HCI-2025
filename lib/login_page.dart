@@ -141,28 +141,35 @@ class _LoginPageState extends State<LoginPage> {
     } on Exception catch (e) {
       if (!mounted) return;
       
-      // Extract user-friendly error message
-      String errorMessage = e.toString().toLowerCase();
-      String displayMessage;
+      String errorMessage = e.toString();
+      // Remove "Exception: " prefix if present
+      if (errorMessage.startsWith('Exception: ')) {
+        errorMessage = errorMessage.substring(11);
+      }
       
-      if (errorMessage.contains('invalid') && (errorMessage.contains('credential') || errorMessage.contains('password'))) {
+      String displayMessage;
+      String lowerError = errorMessage.toLowerCase();
+      
+      if (lowerError.contains('verify your email')) {
+        displayMessage = errorMessage;
+      } else if (lowerError.contains('invalid') && (lowerError.contains('credential') || lowerError.contains('password'))) {
         displayMessage = 'Invalid email or password.';
-      } else if (errorMessage.contains('user-not-found') || errorMessage.contains('user not found')) {
+      } else if (lowerError.contains('user-not-found') || lowerError.contains('user not found')) {
         displayMessage = 'No account found with this email.';
-      } else if (errorMessage.contains('wrong-password') || errorMessage.contains('incorrect')) {
+      } else if (lowerError.contains('wrong-password') || lowerError.contains('incorrect')) {
         displayMessage = 'Incorrect password.';
-      } else if (errorMessage.contains('email-already-in-use') || errorMessage.contains('already exists')) {
+      } else if (lowerError.contains('email-already-in-use') || lowerError.contains('already exists')) {
         displayMessage = 'An account already exists with this email.';
-      } else if (errorMessage.contains('weak-password') || errorMessage.contains('too weak')) {
+      } else if (lowerError.contains('weak-password') || lowerError.contains('too weak')) {
         displayMessage = 'Password is too weak. Use at least 6 characters.';
-      } else if (errorMessage.contains('invalid-email') || errorMessage.contains('badly formatted')) {
+      } else if (lowerError.contains('invalid-email') || lowerError.contains('badly formatted')) {
         displayMessage = 'Invalid email address format.';
-      } else if (errorMessage.contains('network') || errorMessage.contains('connection')) {
+      } else if (lowerError.contains('network') || lowerError.contains('connection')) {
         displayMessage = 'Network error. Please check your connection.';
-      } else if (errorMessage.contains('too-many-requests')) {
+      } else if (lowerError.contains('too-many-requests')) {
         displayMessage = 'Too many attempts. Please try again later.';
       } else {
-        displayMessage = 'Authentication failed. Please try again.';
+        displayMessage = errorMessage;
       }
       
       setState(() {

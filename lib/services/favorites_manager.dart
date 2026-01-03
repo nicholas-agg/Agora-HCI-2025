@@ -16,15 +16,11 @@ class FavoritesManager extends ChangeNotifier {
   final List<StudyPlace> _favorites = [];
   final DatabaseService _databaseService = DatabaseService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  bool _initialized = false;
   
-  static const String _favoritesKey = 'user_favorites';
-
   List<StudyPlace> get favorites => List.unmodifiable(_favorites);
 
   // Initialize and load favorites from cloud or local storage
   Future<void> initialize() async {
-    if (_initialized) return;
     final user = _auth.currentUser;
     if (user != null) {
       // User is logged in, sync from cloud
@@ -33,8 +29,15 @@ class FavoritesManager extends ChangeNotifier {
       // User not logged in, load from local storage
       await _loadFavorites();
     }
-    _initialized = true;
     notifyListeners();
+  }
+
+  String _getFavoritesKey() {
+    final user = _auth.currentUser;
+    if (user != null) {
+      return 'user_favorites_${user.uid}';
+    }
+    return 'guest_favorites';
   }
 
   // Sync favorites from cloud database
@@ -72,7 +75,7 @@ class FavoritesManager extends ChangeNotifier {
   Future<void> _loadFavorites() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final String? favoritesJson = prefs.getString(_favoritesKey);
+      final String? favoritesJson = prefs.getString(_getFavoritesKey());
       if (favoritesJson != null) {
         final List<dynamic> favoritesList = json.decode(favoritesJson);
         _favorites.clear();
@@ -92,7 +95,7 @@ class FavoritesManager extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       final List<Map<String, dynamic>> favoritesList = 
           _favorites.map((place) => _studyPlaceToJson(place)).toList();
-      await prefs.setString(_favoritesKey, json.encode(favoritesList));
+      await prefs.setString(_getFavoritesKey(), json.encode(favoritesList));
       notifyListeners();
     } catch (e) {
       developer.log('Error saving favorites: $e');

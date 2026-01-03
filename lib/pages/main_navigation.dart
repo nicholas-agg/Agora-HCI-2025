@@ -30,7 +30,7 @@ class _MainNavigationState extends State<MainNavigation> {
         onLogout: widget.onLogout,
         username: widget.username,
       ),
-      const FavoritesPage(),
+      FavoritesPage(onLogout: widget.onLogout),
       ProfilePage(onSignOut: widget.onLogout),
     ];
   }
@@ -45,10 +45,7 @@ class _MainNavigationState extends State<MainNavigation> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _pages,
-      ),
+      body: _pages[_currentIndex],
       bottomNavigationBar: Container(
         height: 80,
         decoration: BoxDecoration(

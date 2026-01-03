@@ -3,9 +3,11 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../models/study_place.dart';
 import '../services/favorites_manager.dart';
 import 'place_details_page.dart';
+import 'menu_page.dart';
 
 class FavoritesPage extends StatefulWidget {
-  const FavoritesPage({super.key});
+  final VoidCallback? onLogout;
+  const FavoritesPage({super.key, this.onLogout});
 
   @override
   State<FavoritesPage> createState() => _FavoritesPageState();
@@ -51,6 +53,13 @@ class _FavoritesPageState extends State<FavoritesPage> {
     };
     _favoritesManager.addListener(_listener);
     _initFavorites();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Refresh favorites whenever the page becomes visible
+    _favoritesManager.forceSync();
   }
 
   Future<void> _initFavorites() async {
@@ -142,7 +151,18 @@ class _FavoritesPageState extends State<FavoritesPage> {
               decoration: InputDecoration(
                 hintText: 'Search for a place to study',
                 hintStyle: TextStyle(color: colorScheme.onSurfaceVariant),
-                prefixIcon: Icon(Icons.menu, color: colorScheme.onSurfaceVariant),
+                prefixIcon: IconButton(
+                  icon: Icon(Icons.menu, color: colorScheme.onSurfaceVariant),
+                  onPressed: () {
+                    if (widget.onLogout != null) {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => MenuPage(onSignOut: widget.onLogout!),
+                        ),
+                      );
+                    }
+                  },
+                ),
                 suffixIcon: Icon(Icons.search, color: colorScheme.onSurfaceVariant),
                 filled: true,
                 fillColor: colorScheme.surfaceContainerHighest,

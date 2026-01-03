@@ -111,23 +111,17 @@ class _MyAppState extends State<MyApp> {
           }
           
           // If user is logged in AND email is verified, show main navigation
-          if (snapshot.hasData && snapshot.data != null) {
-            // Check if email is verified
-            if (snapshot.data!.emailVerified) {
-              return MainNavigation(
-                onLogout: () async {
-                  await _authService.signOut();
-                },
-                username: snapshot.data!.displayName ?? snapshot.data!.email ?? 'User',
-              );
-            } else {
-              // User is signed in but email not verified - sign them out and show login
-              _authService.signOut();
-              return const LoginPage();
-            }
+          if (snapshot.hasData && snapshot.data != null && snapshot.data!.emailVerified) {
+            return MainNavigation(
+              onLogout: () async {
+                await FavoritesManager().clearFavorites();
+                await _authService.signOut();
+              },
+              username: snapshot.data!.displayName ?? snapshot.data!.email ?? 'User',
+            );
           }
           
-          // Otherwise, show login page
+          // Otherwise (not logged in or not verified), show login page
           return const LoginPage();
         },
       ),

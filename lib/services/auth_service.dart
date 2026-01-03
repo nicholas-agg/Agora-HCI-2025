@@ -25,15 +25,18 @@ class AuthService {
         password: password,
       );
 
-      // Update display name
-      await credential.user?.updateDisplayName(displayName);
+      final user = credential.user;
+      if (user == null) throw Exception('Failed to create user.');
 
-      // Send email verification
-      await credential.user?.sendEmailVerification();
+      // 1. Update display name while still signed in
+      await user.updateDisplayName(displayName);
 
-      // Create user document in Firestore
+      // 2. Send email verification while still signed in
+      await user.sendEmailVerification();
+
+      // 3. Create user document in Firestore
       final appUser = AppUser(
-        uid: credential.user!.uid,
+        uid: user.uid,
         email: email,
         displayName: displayName,
         createdAt: DateTime.now(),
@@ -41,17 +44,17 @@ class AuthService {
 
       await _firestore
           .collection('users')
-          .doc(credential.user!.uid)
+          .doc(user.uid)
           .set(appUser.toFirestore());
 
-      // Sign out user so they must verify email before accessing the app
+      // 4. Finally sign out so they must verify before accessing the app
       await _auth.signOut();
 
       return appUser;
     } on FirebaseAuthException catch (e) {
       throw _handleAuthException(e);
     } catch (e) {
-      throw Exception('Failed to sign up: $e');
+      throw Exception(e.toString());
     }
   }
 

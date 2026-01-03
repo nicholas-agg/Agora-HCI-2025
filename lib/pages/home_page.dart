@@ -534,8 +534,11 @@ class _MyHomePageState extends State<MyHomePage> {
                 child: _isSearching
                     ? Row(
                         children: [
-                          Icon(Icons.search, color: colorScheme.onSurfaceVariant),
-                          const SizedBox(width: 12),
+                          IconButton(
+                            icon: Icon(Icons.menu, color: colorScheme.onSurfaceVariant),
+                            onPressed: () => _openMenu(context),
+                          ),
+                          const SizedBox(width: 4),
                           Expanded(
                             child: TextField(
                               controller: _searchController,
@@ -576,8 +579,11 @@ class _MyHomePageState extends State<MyHomePage> {
                       )
                     : Row(
                         children: [
-                          Icon(Icons.search, color: colorScheme.onSurfaceVariant),
-                          const SizedBox(width: 12),
+                          IconButton(
+                            icon: Icon(Icons.menu, color: colorScheme.onSurfaceVariant),
+                            onPressed: () => _openMenu(context),
+                          ),
+                          const SizedBox(width: 4),
                           Expanded(
                             child: Text(
                               'Search for a place to study',
@@ -718,17 +724,17 @@ class _MyHomePageState extends State<MyHomePage> {
                                   GestureDetector(
                                     onTap: () async {
                                       final rootContext = context;
+                                      final wasFavorite = _favoritesManager.isFavorite(_selectedPlace!);
                                       await _favoritesManager.toggleFavorite(_selectedPlace!);
                                       if (!mounted) return;
                                       setState(() {});
-                                      final isFavorite = _favoritesManager.isFavorite(_selectedPlace!);
                                       if (!rootContext.mounted) return;
                                       ScaffoldMessenger.of(rootContext).showSnackBar(
                                         SnackBar(
                                           content: Text(
-                                            isFavorite 
-                                              ? '${_selectedPlace!.name} added to favorites' 
-                                              : '${_selectedPlace!.name} removed from favorites'
+                                            wasFavorite 
+                                              ? '${_selectedPlace!.name} removed from favorites' 
+                                              : '${_selectedPlace!.name} added to favorites'
                                           ),
                                           duration: const Duration(seconds: 2),
                                         ),
