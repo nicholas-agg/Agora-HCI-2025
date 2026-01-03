@@ -10,6 +10,7 @@ import 'place_details_page.dart';
 import '../services/favorites_manager.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'dart:math';
 
 class MyHomePage extends StatefulWidget {
   final VoidCallback onLogout;
@@ -81,7 +82,9 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future<void> _centerOnCurrentLocation() async {
     try {
-      Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      Position position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+      );
       if (!mounted) return;
       setState(() {
         _currentCenter = LatLng(position.latitude, position.longitude);
@@ -97,25 +100,6 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  void _fitMapToPlaces() {
-    if (_places.isEmpty || _mapController == null) return;
-    LatLngBounds bounds = _createBounds(_places.map((p) => p.location).toList());
-    _mapController!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 60));
-  }
-
-  LatLngBounds _createBounds(List<LatLng> points) {
-    double? minLat, maxLat, minLng, maxLng;
-    for (var p in points) {
-      if (minLat == null || p.latitude < minLat) minLat = p.latitude;
-      if (maxLat == null || p.latitude > maxLat) maxLat = p.latitude;
-      if (minLng == null || p.longitude < minLng) minLng = p.longitude;
-      if (maxLng == null || p.longitude > maxLng) maxLng = p.longitude;
-    }
-    return LatLngBounds(
-      southwest: LatLng(minLat ?? 0, minLng ?? 0),
-      northeast: LatLng(maxLat ?? 0, maxLng ?? 0),
-    );
-  }
 
   Future<void> _fetchPlacesAt(LatLng center, double zoom) async {
     if (!mounted) return;
@@ -278,6 +262,113 @@ class _MyHomePageState extends State<MyHomePage> {
     if (photoReference == null) return null;
     final apiKey = dotenv.env['GOOGLE_MAPS_API_KEY'];
     return 'https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=$photoReference&key=$apiKey';
+  }
+
+  double _calculateRadius(LatLngBounds bounds) {
+    const double earthRadius = 6371000; // meters
+    double lat1 = bounds.northeast.latitude * (pi / 180.0);
+    double lon1 = bounds.northeast.longitude * (pi / 180.0);
+    double lat2 = bounds.southwest.latitude * (pi / 180.0);
+    double lon2 = bounds.southwest.longitude * (pi / 180.0);
+    double dLat = lat2 - lat1;
+    double dLon = lon2 - lon1;
+    double a = 
+      (sin(dLat / 2) * sin(dLat / 2)) +
+      cos(lat1) * cos(lat2) *
+      (sin(dLon / 2) * sin(dLon / 2));
+    double c = 2 * atan2(sqrt(a), sqrt(1 - a));
+    double distance = earthRadius * c;
+    return distance / 2; // half diagonal as radius
+  }
+
+  Future<void> _fetchPlacesInBounds(LatLngBounds bounds, LatLng center) async {
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    final apiKey = dotenv.env['GOOGLE_MAPS_API_KEY'];
+    final location = '${center.latitude},${center.longitude}';
+    final radius = _calculateRadius(bounds);
+    final types = [
+      {'type': 'cafe'},
+      {'type': 'library'},
+      {'type': 'coworking_space', 'keyword': 'coworking'}
+    ];
+    List<StudyPlace> allPlaces = [];
+    try {
+      for (var t in types) {
+        String url = 'https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=$location&radius=${radius.round()}&type=${t['type']}&key=$apiKey';
+        if (t['type'] == 'coworking_space') {
+          url = 'https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=$location&radius=${radius.round()}&keyword=coworking&key=$apiKey';
+        }
+        final response = await http.get(Uri.parse(url));
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data['status'] == 'OK') {
+            for (var result in data['results']) {
+              final name = result['name'];
+              final lat = result['geometry']['location']['lat'];
+              final lng = result['geometry']['location']['lng'];
+              final type = t['type'] == 'coworking_space' ? 'Coworking' : (t['type'] as String).replaceFirst((t['type'] as String)[0], (t['type'] as String)[0].toUpperCase());
+              String? photoRef;
+              if (result['photos'] != null && (result['photos'] as List).isNotEmpty) {
+                photoRef = result['photos'][0]['photo_reference'];
+              }
+              final placeId = result['place_id'];
+              final rating = result['rating']?.toDouble();
+              final userRatingsTotal = result['user_ratings_total']?.toInt();
+              final place = StudyPlace(
+                name,
+                LatLng(lat, lng),
+                type,
+                photoReference: photoRef,
+                placeId: placeId,
+                rating: rating,
+                userRatingsTotal: userRatingsTotal,
+              );
+              // Only add if inside visible bounds
+              if (_isLatLngInBounds(LatLng(lat, lng), bounds)) {
+                allPlaces.add(place);
+              }
+            }
+          }
+        } else {
+          if (!mounted) return;
+          setState(() {
+            _error = 'Failed to fetch places (${t['type']})';
+          });
+        }
+      }
+      // Prioritize: Coworking > Library > Cafe
+      allPlaces.sort((a, b) {
+        int rank(String type) {
+          if (type.toLowerCase().contains('coworking')) return 0;
+          if (type.toLowerCase().contains('library')) return 1;
+          if (type.toLowerCase().contains('cafe')) return 2;
+          return 3;
+        }
+        return rank(a.type).compareTo(rank(b.type));
+      });
+      if (!mounted) return;
+      setState(() {
+        _places = allPlaces;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Error: $e';
+        _loading = false;
+      });
+    }
+  }
+
+  bool _isLatLngInBounds(LatLng point, LatLngBounds bounds) {
+    final lat = point.latitude;
+    final lng = point.longitude;
+    return lat >= bounds.southwest.latitude && lat <= bounds.northeast.latitude &&
+           lng >= bounds.southwest.longitude && lng <= bounds.northeast.longitude;
   }
 
 
@@ -517,9 +608,19 @@ class _MyHomePageState extends State<MyHomePage> {
             right: 0,
             child: Center(
               child: GestureDetector(
-                onTap: () {
-                  _fitMapToPlaces();
-                  _fetchPlacesAt(_currentCenter, _currentZoom);
+                onTap: () async {
+                  if (_mapController != null) {
+                    final bounds = await _mapController!.getVisibleRegion();
+                    final centerLat = (bounds.northeast.latitude + bounds.southwest.latitude) / 2;
+                    final centerLng = (bounds.northeast.longitude + bounds.southwest.longitude) / 2;
+                    final center = LatLng(centerLat, centerLng);
+                    setState(() {
+                      _currentCenter = center;
+                    });
+                    await _fetchPlacesInBounds(bounds, center);
+                  } else {
+                    await _fetchPlacesAt(_currentCenter, _currentZoom);
+                  }
                 },
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -609,12 +710,13 @@ class _MyHomePageState extends State<MyHomePage> {
                                   // Favorite button
                                   GestureDetector(
                                     onTap: () async {
+                                      final rootContext = context;
                                       await _favoritesManager.toggleFavorite(_selectedPlace!);
                                       if (!mounted) return;
                                       setState(() {});
                                       final isFavorite = _favoritesManager.isFavorite(_selectedPlace!);
-                                      if (!mounted) return;
-                                      ScaffoldMessenger.of(context).showSnackBar(
+                                      if (!rootContext.mounted) return;
+                                      ScaffoldMessenger.of(rootContext).showSnackBar(
                                         SnackBar(
                                           content: Text(
                                             isFavorite 

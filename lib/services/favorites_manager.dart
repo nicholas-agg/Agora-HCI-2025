@@ -183,6 +183,29 @@ class FavoritesManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Force sync with cloud (for manual refresh)
+  Future<void> forceSync() async {
+    final user = _auth.currentUser;
+    if (user != null) {
+      try {
+        // Get latest favorites from cloud immediately
+        final cloudFavorites = await _databaseService.getUserFavorites(user.uid).first;
+        _favorites.clear();
+        _favorites.addAll(cloudFavorites);
+        // Save to local storage as backup
+        await _saveFavorites();
+        notifyListeners();
+      } catch (e) {
+        debugPrint('Error forcing sync: $e');
+        // Fall back to local storage if sync fails
+        await _loadFavorites();
+      }
+    } else {
+      // If not logged in, just reload from local storage
+      await _loadFavorites();
+    }
+  }
+
   // Helper methods to convert StudyPlace to/from JSON
   Map<String, dynamic> _studyPlaceToJson(StudyPlace place) {
     return {

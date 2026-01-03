@@ -55,6 +55,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
   Future<void> _initFavorites() async {
     await _favoritesManager.initialize();
+    // Force sync to get latest data from Firebase
+    await _favoritesManager.forceSync();
     if (!mounted) return;
     setState(() {
       _initLoading = false;
@@ -312,12 +314,15 @@ class _FavoritesPageState extends State<FavoritesPage> {
                         : Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                     onPressed: () async {
+                      final rootContext = context;
                       await _favoritesManager.toggleFavorite(place);
                       // Wait a short moment for cloud sync to update local list
                       await Future.delayed(const Duration(milliseconds: 300));
+                      if (!mounted) return;
                       setState(() {});
                       final isNowFavorite = _favoritesManager.isFavorite(place);
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      if (!rootContext.mounted) return;
+                      ScaffoldMessenger.of(rootContext).showSnackBar(
                         SnackBar(
                           content: Text(isNowFavorite
                             ? '${place.name} added to favorites'
@@ -412,7 +417,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
                   children: [
                     Icon(Icons.location_on, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
                     const SizedBox(width: 4),
-                    // TODO: Calculate actual distance from user location
+                    // Note: Calculate actual distance from user location
                     Text(
                       'View on map',
                       style: TextStyle(

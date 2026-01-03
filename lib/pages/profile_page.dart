@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/database_service.dart';
+import '../services/favorites_manager.dart';
 import 'privacy_page.dart';
 import 'help_support_page.dart';
 import 'favorites_page.dart';
@@ -16,6 +17,7 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   final AuthService _authService = AuthService();
   final DatabaseService _databaseService = DatabaseService();
+  final FavoritesManager _favoritesManager = FavoritesManager();
   int _favoriteCount = 0;
   int _reviewCount = 0;
   bool _loading = true;
@@ -23,7 +25,13 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   void initState() {
     super.initState();
-    _loadUserStats();
+    _syncAndLoadUserStats();
+  }
+
+  Future<void> _syncAndLoadUserStats() async {
+    // Force sync favorites from Firebase first
+    await _favoritesManager.forceSync();
+    await _loadUserStats();
   }
 
   Future<void> _loadUserStats() async {

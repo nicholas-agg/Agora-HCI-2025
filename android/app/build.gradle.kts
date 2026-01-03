@@ -32,8 +32,11 @@ android {
         options.compilerArgs.add("-Xlint:-options")
     }
 
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
+    kotlin {
+        jvmToolchain(17)
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        }
     }
 
     defaultConfig {
@@ -45,9 +48,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        manifestPlaceholders.putAll(
-            mapOf("mapsApiKey" to mapsApiKey)
-        )
+        manifestPlaceholders += mapOf("mapsApiKey" to mapsApiKey)
     }
 
     buildTypes {

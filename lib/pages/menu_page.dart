@@ -3,10 +3,24 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../services/theme_manager.dart';
+import '../services/auth_service.dart';
 
-class MenuPage extends StatelessWidget {
+class MenuPage extends StatefulWidget {
   final VoidCallback? onSignOut;
   const MenuPage({super.key, this.onSignOut});
+
+  @override
+  State<MenuPage> createState() => _MenuPageState();
+}
+
+class _MenuPageState extends State<MenuPage> {
+  final _emailController = TextEditingController();
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -232,10 +246,10 @@ class MenuPage extends StatelessWidget {
               ),
               subtitle: const Text('Sign out of your account'),
               onTap: () {
-                if (onSignOut != null) {
+                if (widget.onSignOut != null) {
                   // Pop back to main navigation first, then logout
                   Navigator.of(context).pop();
-                  onSignOut!();
+                  widget.onSignOut!();
                 } else {
                   Navigator.of(context).maybePop();
                 }
@@ -269,45 +283,127 @@ class MenuPage extends StatelessWidget {
                 'Permanently remove your account',
                 style: TextStyle(color: Color(0xFFF87171)),
               ),
-              onTap: () {
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Delete Account'),
-                    content: const Text(
-                      'Are you sure you want to permanently delete your account? This action cannot be undone.',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Cancel'),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          showDialog(
-                            context: context,
-                            builder: (context) => AlertDialog(
-                              title: const Text('Account Deletion'),
-                              content: const Text('Account deletion is not available in demo.'),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context),
-                                  child: const Text('OK'),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                        child: const Text(
-                          'Delete',
-                          style: TextStyle(color: Color(0xFFDC2626)),
-                        ),
-                      ),
-                    ],
+              onTap: () => _showDeleteAccountDialog(context),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteAccountDialog(BuildContext context) {
+    final authService = AuthService();
+    _emailController.clear();
+    final rootContext = context;
+    
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete Account'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'To permanently delete your account, please enter your email address below.',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _emailController,
+              decoration: InputDecoration(
+                hintText: 'Enter your email',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              ),
+              keyboardType: TextInputType.emailAddress,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+            },
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              final currentUser = authService.currentUser;
+              final enteredEmail = _emailController.text.trim();
+              
+              if (enteredEmail.isEmpty) {
+                ScaffoldMessenger.of(rootContext).showSnackBar(
+                  const SnackBar(content: Text('Please enter your email')),
+                );
+                return;
+              }
+              
+              if (currentUser?.email?.toLowerCase() != enteredEmail.toLowerCase()) {
+                ScaffoldMessenger.of(rootContext).showSnackBar(
+                  const SnackBar(content: Text('Email does not match')),
+                );
+                return;
+              }
+              
+              // Check if demo user
+              if (enteredEmail.toLowerCase() == 'demo@agora.com') {
+                Navigator.pop(dialogContext);
+                
+                ScaffoldMessenger.of(rootContext).showSnackBar(
+                  const SnackBar(
+                    content: Text('Account deletion is not available for the demo user.'),
+                    duration: Duration(seconds: 3),
                   ),
                 );
-              },
+                return;
+              }
+              
+              try {
+                Navigator.pop(dialogContext);
+                
+                // Show loading dialog
+                showDialog(
+                  context: rootContext,
+                  barrierDismissible: false,
+                  builder: (context) => const Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                );
+                
+                // Delete account
+                await authService.deleteAccount();
+                
+                // Guard context usage across async gap with BuildContext
+                if (!rootContext.mounted) return;
+
+                // Close loading dialog
+                Navigator.pop(rootContext);
+                
+                // Sign out callback
+                if (widget.onSignOut != null) {
+                  Navigator.of(rootContext).pop();
+                  widget.onSignOut!();
+                }
+              } catch (e) {
+                // Guard context usage across async gap with BuildContext
+                if (!rootContext.mounted) return;
+
+                // Close loading dialog if still showing
+                if (Navigator.canPop(rootContext)) {
+                  Navigator.pop(rootContext);
+                }
+                
+                ScaffoldMessenger.of(rootContext).showSnackBar(
+                  SnackBar(content: Text('Error: $e')),
+                );
+              }
+            },
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: Color(0xFFDC2626)),
             ),
           ),
         ],
