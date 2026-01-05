@@ -590,45 +590,39 @@ class _MyHomePageState extends State<MyHomePage> {
             child: Builder(
               builder: (context) {
                 final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-                return AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 400),
-                  switchInCurve: Curves.easeIn,
-                  switchOutCurve: Curves.easeOut,
-                  child: GoogleMap(
-                    key: ValueKey(isDarkMode), // Key ensures AnimatedSwitcher detects the change
-                    cloudMapId: isDarkMode ? '2f87b85e986833829e30b116' : null,
-                    initialCameraPosition: CameraPosition(
-                      target: _currentCenter,
-                      zoom: _currentZoom,
-                    ),
-              myLocationEnabled: true,
-              myLocationButtonEnabled: false,
-              zoomControlsEnabled: false,
-              markers: _places
-                  .map((place) => Marker(
-                        markerId: MarkerId(place.name),
-                        position: place.location,
-                        onTap: () {
-                          setState(() {
-                            _selectedPlace = place;
-                          });
-                          _fetchAgoraReviewStats(place.placeId ?? '');
-                          _mapController?.animateCamera(
-                            CameraUpdate.newLatLng(place.location),
-                          );
-                        },
-                        icon: _getMarkerIconForType(place.type),
-                      ))
-                  .toSet(),
-              onMapCreated: (controller) {
-                _mapController = controller;
-              },
-              onTap: (_) {
-                setState(() {
-                  _selectedPlace = null;
-                });
-              },
+                return GoogleMap(
+                  cloudMapId: isDarkMode ? '2f87b85e986833829e30b116' : null,
+                  initialCameraPosition: CameraPosition(
+                    target: _currentCenter,
+                    zoom: _currentZoom,
                   ),
+                  myLocationEnabled: true,
+                  myLocationButtonEnabled: false,
+                  zoomControlsEnabled: false,
+                  markers: _places
+                      .map((place) => Marker(
+                            markerId: MarkerId(place.name),
+                            position: place.location,
+                            onTap: () {
+                              setState(() {
+                                _selectedPlace = place;
+                              });
+                              _fetchAgoraReviewStats(place.placeId ?? '');
+                              _mapController?.animateCamera(
+                                CameraUpdate.newLatLng(place.location),
+                              );
+                            },
+                            icon: _getMarkerIconForType(place.type),
+                          ))
+                      .toSet(),
+                  onMapCreated: (controller) {
+                    _mapController = controller;
+                  },
+                  onTap: (_) {
+                    setState(() {
+                      _selectedPlace = null;
+                    });
+                  },
                 );
               },
             ),
