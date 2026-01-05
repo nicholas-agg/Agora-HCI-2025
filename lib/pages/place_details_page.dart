@@ -14,13 +14,199 @@ class PlaceDetailsPage extends StatefulWidget {
   State<PlaceDetailsPage> createState() => _PlaceDetailsPageState();
 }
 
+
 class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
+
+    // For editing review
+    int _editRating = 0;
+    String _editOutlets = 'None';
+    final TextEditingController _editReviewController = TextEditingController();
+
+
+    void _showEditReviewDialog(Review review) {
+      _editRating = review.rating;
+      _editOutlets = review.outlets;
+      _editReviewController.text = review.reviewText;
+      showDialog(
+        context: context,
+        builder: (dialogContext) {
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              final colorScheme = Theme.of(context).colorScheme;
+              return AlertDialog(
+                title: const Text('Edit Review'),
+                content: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Rating'),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: List.generate(5, (index) {
+                            return IconButton(
+                              icon: Icon(
+                                index < _editRating ? Icons.star : Icons.star_border,
+                                color: colorScheme.primary,
+                              ),
+                              onPressed: () {
+                                setDialogState(() {
+                                  _editRating = index + 1;
+                                });
+                              },
+                            );
+                          }),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      const Text('Power outlets'),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          ChoiceChip(
+                            label: const Text('None'),
+                            selected: _editOutlets == 'None',
+                            onSelected: (_) {
+                              setDialogState(() {
+                                _editOutlets = 'None';
+                              });
+                            },
+                          ),
+                          ChoiceChip(
+                            label: const Text('Few'),
+                            selected: _editOutlets == 'Few',
+                            onSelected: (_) {
+                              setDialogState(() {
+                                _editOutlets = 'Few';
+                              });
+                            },
+                          ),
+                          ChoiceChip(
+                            label: const Text('A lot'),
+                            selected: _editOutlets == 'A lot',
+                            onSelected: (_) {
+                              setDialogState(() {
+                                _editOutlets = 'A lot';
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _editReviewController,
+                        maxLines: 5,
+                        decoration: const InputDecoration(
+                          hintText: 'Edit your review',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () async {
+                      await _databaseService.updateReview(
+                        reviewId: review.id,
+                        rating: _editRating,
+                        outlets: _editOutlets,
+                        reviewText: _editReviewController.text.trim(),
+                      );
+                      if (!context.mounted) return;
+                      Navigator.of(context).pop();
+                      // Refresh user review
+                      _checkIfUserReviewed();
+                      setState(() {});
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Review updated!'), backgroundColor: Colors.green),
+                      );
+                    },
+                    child: const Text('Save'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+    }
+
+    void _confirmDeleteReview(Review review) {
+      showDialog(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Delete Review'),
+          content: const Text('Are you sure you want to delete your review?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.delete),
+              label: const Text('Delete'),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () async {
+                await _databaseService.deleteReview(review.id);
+                if (!dialogContext.mounted) return;
+                Navigator.of(dialogContext).pop();
+                setState(() {
+                  _hasReviewed = false;
+                  _userReview = null;
+                });
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Review deleted'), backgroundColor: Colors.red),
+                );
+              },
+            ),
+          ],
+        ),
+      );
+    }
   final TextEditingController _reviewController = TextEditingController();
   final DatabaseService _databaseService = DatabaseService();
   final AuthService _authService = AuthService();
   int _selectedRating = 0;
   String _selectedOutlets = 'None'; // None, Few, A lot
   bool _submittingReview = false;
+
+  // Track if user already reviewed this place
+  bool _hasReviewed = false;
+  Review? _userReview;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkIfUserReviewed();
+  }
+
+  Future<void> _checkIfUserReviewed() async {
+    final user = _authService.currentUser;
+    final placeId = widget.place.placeId;
+    if (user == null || placeId == null) return;
+    final query = await _databaseService
+        .getPlaceReviews(placeId)
+        .first;
+    Review? userReview;
+    try {
+      userReview = query.firstWhere((review) => review.userId == user.uid);
+    } catch (e) {
+      userReview = null;
+    }
+    if (userReview != null) {
+      setState(() {
+        _hasReviewed = true;
+        _userReview = userReview;
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -32,6 +218,14 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
     if (photoReference == null) return null;
     final apiKey = dotenv.env['GOOGLE_MAPS_API_KEY'];
     return 'https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference=$photoReference&key=$apiKey';
+  }
+
+  IconData _getCategoryIcon(String type) {
+    final t = type.toLowerCase();
+    if (t.contains('cafe')) return Icons.local_cafe;
+    if (t.contains('library')) return Icons.menu_book;
+    if (t.contains('coworking')) return Icons.work;
+    return Icons.location_on;
   }
 
   void _measureNoise() {
@@ -137,13 +331,23 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
           icon: Icon(Icons.arrow_back, color: colorScheme.onSurface),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Text(
-          'Agora',
-          style: TextStyle(
-            color: colorScheme.onSurface,
-            fontWeight: FontWeight.w400,
-            fontSize: 22,
-          ),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(_getCategoryIcon(widget.place.type), color: colorScheme.primary),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                widget.place.name,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: colorScheme.onSurface,
+                  fontWeight: FontWeight.w400,
+                  fontSize: 22,
+                ),
+              ),
+            ),
+          ],
         ),
         centerTitle: true,
       ),
@@ -183,18 +387,82 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                   ),
                   child: Center(
                     child: Icon(
-                      widget.place.type.toLowerCase().contains('cafe')
-                          ? Icons.local_cafe
-                          : widget.place.type.toLowerCase().contains('library')
-                              ? Icons.menu_book
-                              : Icons.work,
+                      _getCategoryIcon(widget.place.type),
                       size: 60,
-                      color: const Color(0xFF6750A4),
+                      color: colorScheme.primary,
                     ),
                   ),
                 ),
               
               const SizedBox(height: 24),
+
+              // Ratings Summary (matching homepage card style)
+              Column(
+                children: [
+                  if (widget.place.rating != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4.0),
+                      child: Row(
+                        children: [
+                          Icon(Icons.star, size: 18, color: colorScheme.onSurface),
+                          const SizedBox(width: 8),
+                          Text(
+                            '${widget.place.rating!.toStringAsFixed(1)} (Google, ${widget.place.userRatingsTotal ?? 0} reviews)',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.onSurface,
+                              fontFamily: 'Inter',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  StreamBuilder<List<Review>>(
+                    stream: _databaseService.getPlaceReviews(widget.place.placeId ?? ''),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const SizedBox.shrink();
+                      }
+                      final reviews = snapshot.data ?? [];
+                      if (reviews.isEmpty) {
+                        return Row(
+                          children: [
+                            Icon(Icons.star_border, size: 18, color: colorScheme.onSurfaceVariant),
+                            const SizedBox(width: 8),
+                            Text(
+                              'No Agora reviews yet',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: colorScheme.onSurfaceVariant,
+                                fontFamily: 'Inter',
+                              ),
+                            ),
+                          ],
+                        );
+                      }
+                      final avg = reviews.fold<double>(0, (sum, r) => sum + r.rating) / reviews.length;
+                      return Row(
+                        children: [
+                          Icon(Icons.star, size: 18, color: colorScheme.primary),
+                          const SizedBox(width: 8),
+                          Text(
+                            '${avg.toStringAsFixed(1)} (Agora, ${reviews.length} reviews)',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.onSurface,
+                              fontFamily: 'Inter',
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 32),
               
               // Rating Section
               Text(
@@ -226,6 +494,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
               
               const SizedBox(height: 32),
               
+
               // Review Section
               Text(
                 'Your Review',
@@ -236,123 +505,181 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                 ),
               ),
               const SizedBox(height: 16),
-              Card(
-                elevation: 2,
-                color: colorScheme.surface,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
+              if (_hasReviewed && _userReview != null) ...[
+                Card(
+                  elevation: 2,
+                  color: colorScheme.surface,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'You have already reviewed this place.',
+                                style: TextStyle(
+                                  color: colorScheme.primary,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit, color: Colors.blue),
+                                  tooltip: 'Edit',
+                                  onPressed: () => _showEditReviewDialog(_userReview!),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete, color: Colors.red),
+                                  tooltip: 'Delete',
+                                  onPressed: () => _confirmDeleteReview(_userReview!),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Your review:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(_userReview!.reviewText),
+                      ],
+                    ),
+                  ),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: TextField(
-                    controller: _reviewController,
-                    maxLines: 5,
-                    decoration: InputDecoration(
-                      hintText: 'Write your review about this place',
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.all(8),
-                      hintStyle: TextStyle(
+              ] else ...[
+                Card(
+                  elevation: 2,
+                  color: colorScheme.surface,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12.0),
+                    child: TextField(
+                      controller: _reviewController,
+                      maxLines: 5,
+                      decoration: InputDecoration(
+                        hintText: 'Write your review about this place',
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.all(8),
+                        hintStyle: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w400,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w400,
-                        color: colorScheme.onSurfaceVariant,
+                        color: colorScheme.onSurface,
                       ),
                     ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                // Measure Noise Button
+                Center(
+                  child: ElevatedButton.icon(
+                    onPressed: _measureNoise,
+                    icon: const Icon(Icons.volume_up, color: Colors.white),
+                    label: const Text(
+                      'Measure noise',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6750A4),
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(100),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 32),
+              ],
+              
+              // Power Outlets Section
+              if (!_hasReviewed) ...[
+                Center(
+                  child: Text(
+                    'Power outlets',
                     style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w400,
+                      fontSize: 32,
+                      fontWeight: FontWeight.w500,
                       color: colorScheme.onSurface,
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 24),
-              
-              // Measure Noise Button
-              Center(
-                child: ElevatedButton.icon(
-                  onPressed: _measureNoise,
-                  icon: const Icon(Icons.volume_up, color: Colors.white),
-                  label: const Text(
-                    'Measure noise',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white,
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildOutletButton('None'),
                     ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6750A4),
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(100),
+                    const SizedBox(width: 2),
+                    Expanded(
+                      child: _buildOutletButton('Few'),
                     ),
-                  ),
+                    const SizedBox(width: 2),
+                    Expanded(
+                      child: _buildOutletButton('A lot'),
+                    ),
+                  ],
                 ),
-              ),
-              
-              const SizedBox(height: 32),
-              
-              // Power Outlets Section
-              Center(
-                child: Text(
-                  'Power outlets',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w500,
-                    color: colorScheme.onSurface,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildOutletButton('None'),
-                  ),
-                  const SizedBox(width: 2),
-                  Expanded(
-                    child: _buildOutletButton('Few'),
-                  ),
-                  const SizedBox(width: 2),
-                  Expanded(
-                    child: _buildOutletButton('A lot'),
-                  ),
-                ],
-              ),
-              
-              const SizedBox(height: 32),
+                
+                const SizedBox(height: 32),
+              ],
               
               // Submit Button
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _submittingReview ? null : _submitReview,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6750A4),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(100),
+              if (!_hasReviewed) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _submittingReview ? null : _submitReview,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6750A4),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(100),
+                      ),
                     ),
+                    child: _submittingReview
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            'Submit Review',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                   ),
-                  child: _submittingReview
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text(
-                          'Submit Review',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
                 ),
-              ),
+              ],
               
               const SizedBox(height: 48),
               
@@ -407,14 +734,91 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                         ),
                       );
                     }
+
+                    // Calculate summary
+                    final totalReviews = reviews.length;
+                    final averageRating = reviews.fold<double>(0, (sum, r) => sum + r.rating) / totalReviews;
                     
-                    return ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: reviews.length,
-                      itemBuilder: (context, index) {
-                        return _buildReviewCard(reviews[index]);
-                      },
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Summary Card
+                        Card(
+                          elevation: 0,
+                          color: colorScheme.primaryContainer.withOpacity(0.3),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Row(
+                              children: [
+                                Column(
+                                  children: [
+                                    Text(
+                                      averageRating.toStringAsFixed(1),
+                                      style: TextStyle(
+                                        fontSize: 48,
+                                        fontWeight: FontWeight.bold,
+                                        color: colorScheme.primary,
+                                      ),
+                                    ),
+                                    Row(
+                                      children: List.generate(5, (index) {
+                                        return Icon(
+                                          index < averageRating.round() ? Icons.star : Icons.star_border,
+                                          size: 16,
+                                          color: const Color(0xFFFBBF24),
+                                        );
+                                      }),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '$totalReviews reviews',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(width: 24),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Agora Community Summary',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: colorScheme.onSurface,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Based on feedback from local students and researchers in Athens.',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: colorScheme.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: reviews.length,
+                          itemBuilder: (context, index) {
+                            return _buildReviewCard(reviews[index]);
+                          },
+                        ),
+                      ],
                     );
                   },
                 ),

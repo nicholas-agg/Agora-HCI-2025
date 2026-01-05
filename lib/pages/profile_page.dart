@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/database_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:io';
 import '../services/favorites_manager.dart';
 import 'privacy_page.dart';
 import 'help_support_page.dart';
@@ -23,6 +25,7 @@ class _ProfilePageState extends State<ProfilePage> {
   int _favoriteCount = 0;
   int _reviewCount = 0;
   bool _loading = true;
+  String? _profilePicturePath;
   VoidCallback _favoritesListener = () {};
 
   @override
@@ -36,7 +39,18 @@ class _ProfilePageState extends State<ProfilePage> {
       }
     };
     _favoritesManager.addListener(_favoritesListener);
+    _loadProfilePictureLocal();
     // Do not call _syncAndLoadUserStats here; will be called in didChangeDependencies
+  }
+
+  Future<void> _loadProfilePictureLocal() async {
+    final prefs = await SharedPreferences.getInstance();
+    final path = prefs.getString('profile_picture_path');
+    if (mounted) {
+      setState(() {
+        _profilePicturePath = path;
+      });
+    }
   }
 
   @override
@@ -67,7 +81,6 @@ class _ProfilePageState extends State<ProfilePage> {
     try {
       final favoriteCount = await _databaseService.getFavoriteCount(user.uid);
       final reviewCount = await _databaseService.getUserReviewCount(user.uid);
-      
       if (mounted) {
         setState(() {
           _favoriteCount = favoriteCount;
@@ -127,7 +140,12 @@ class _ProfilePageState extends State<ProfilePage> {
                 CircleAvatar(
                   radius: 36,
                   backgroundColor: colorScheme.primaryContainer,
-                  child: Icon(Icons.person, size: 40, color: colorScheme.primary),
+                  backgroundImage: _profilePicturePath != null
+                    ? FileImage(File(_profilePicturePath!))
+                    : null,
+                  child: _profilePicturePath == null
+                    ? Icon(Icons.person, size: 40, color: colorScheme.primary)
+                    : null,
                 ),
                 const SizedBox(width: 20),
                 Expanded(
@@ -155,12 +173,14 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 IconButton(
                   icon: Icon(Icons.edit, color: colorScheme.primary),
-                  onPressed: () {
-                    Navigator.of(context).push(
+                  onPressed: () async {
+                    await Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (context) => EditProfilePage(),
                       ),
                     );
+                    // Reload profile data when returning from edit page
+                    _syncAndLoadUserStats();
                   },
                 ),
               ],

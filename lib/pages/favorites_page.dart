@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/study_place.dart';
 import '../services/favorites_manager.dart';
 import 'place_details_page.dart';
@@ -27,11 +28,11 @@ class _FavoritesPageState extends State<FavoritesPage> {
     if (_selectedFilter != 'All') {
       filtered = filtered.where((place) {
         final type = place.type.toLowerCase();
-        if (_selectedFilter == 'Libraries') {
+        if (_selectedFilter == 'Library') {
           return type.contains('library');
-        } else if (_selectedFilter == 'Cafeterias') {
-          return type.contains('cafe') || type.contains('cafeteria');
-        } else if (_selectedFilter == 'CoWorking') {
+        } else if (_selectedFilter == 'Cafe') {
+          return type.contains('cafe');
+        } else if (_selectedFilter == 'Coworking') {
           return type.contains('coworking');
         }
         return true;
@@ -72,6 +73,28 @@ class _FavoritesPageState extends State<FavoritesPage> {
     });
   }
 
+  Future<Map<String, dynamic>> _getAgoraStats(String placeId) async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('reviews')
+          .where('placeId', isEqualTo: placeId)
+          .get();
+      
+      if (snapshot.docs.isEmpty) {
+        return {'rating': 0.0, 'count': 0};
+      }
+      
+      final ratings = snapshot.docs.map((doc) => doc.data()['rating'] as int).toList();
+      final sum = ratings.fold<int>(0, (prev, rating) => prev + rating);
+      return {
+        'rating': sum / ratings.length,
+        'count': ratings.length,
+      };
+    } catch (e) {
+      return {'rating': 0.0, 'count': 0};
+    }
+  }
+
   @override
   void dispose() {
     _favoritesManager.removeListener(_listener);
@@ -86,33 +109,50 @@ class _FavoritesPageState extends State<FavoritesPage> {
   }
 
   Color _getTypeColor(String type) {
-    if (type.toLowerCase().contains('library')) {
+    final t = type.toLowerCase();
+    if (t.contains('library')) {
       return const Color(0xFFDCFCE7); // Light green
-    } else if (type.toLowerCase().contains('cafe') || type.toLowerCase().contains('cafeteria')) {
+    } else if (t.contains('cafe')) {
       return const Color(0xFFDBEAFE); // Light blue
+    } else if (t.contains('coworking')) {
+      return const Color(0xFFF3E8FF); // Light purple
     } else {
-      return const Color(0xFFF3E8FF); // Light purple (coworking)
+      return const Color(0xFFF3F4F6); // Light grey
     }
   }
 
   Color _getTypeTextColor(String type) {
-    if (type.toLowerCase().contains('library')) {
+    final t = type.toLowerCase();
+    if (t.contains('library')) {
       return const Color(0xFF15803D); // Green
-    } else if (type.toLowerCase().contains('cafe') || type.toLowerCase().contains('cafeteria')) {
+    } else if (t.contains('cafe')) {
       return const Color(0xFF1D4ED8); // Blue
+    } else if (t.contains('coworking')) {
+      return const Color(0xFF7C3AED); // Purple
     } else {
-      return const Color(0xFF7C3AED); // Purple (coworking)
+      return const Color(0xFF4B5563); // Grey
     }
   }
 
   String _getTypeLabel(String type) {
-    if (type.toLowerCase().contains('library')) {
+    final t = type.toLowerCase();
+    if (t.contains('library')) {
       return 'Library';
-    } else if (type.toLowerCase().contains('cafe') || type.toLowerCase().contains('cafeteria')) {
-      return 'Cafeteria';
-    } else {
+    } else if (t.contains('cafe')) {
+      return 'Cafe';
+    } else if (t.contains('coworking')) {
       return 'Coworking';
+    } else {
+      return 'Other';
     }
+  }
+
+  IconData _getCategoryIcon(String type) {
+    final t = type.toLowerCase();
+    if (t.contains('cafe')) return Icons.local_cafe;
+    if (t.contains('library')) return Icons.menu_book;
+    if (t.contains('coworking')) return Icons.work;
+    return Icons.location_on;
   }
 
   @override
@@ -185,11 +225,11 @@ class _FavoritesPageState extends State<FavoritesPage> {
                 children: [
                   _buildFilterChip('All', Icons.stars, colorScheme),
                   const SizedBox(width: 8),
-                  _buildFilterChip('Libraries', Icons.menu_book, colorScheme),
+                  _buildFilterChip('Library', Icons.menu_book, colorScheme),
                   const SizedBox(width: 8),
-                  _buildFilterChip('Cafeterias', Icons.local_cafe, colorScheme),
+                  _buildFilterChip('Cafe', Icons.local_cafe, colorScheme),
                   const SizedBox(width: 8),
-                  _buildFilterChip('CoWorking', Icons.business_center, colorScheme),
+                  _buildFilterChip('Coworking', Icons.work, colorScheme),
                 ],
               ),
             ),
@@ -310,10 +350,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
                         width: double.infinity,
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) {
-                          return _buildPlaceholderImage();
+                          return _buildPlaceholderImage(place.type);
                         },
                       )
-                    : _buildPlaceholderImage(),
+                    : _buildPlaceholderImage(place.type),
               ),
               // Favorite Heart Button
               Positioned(
@@ -397,38 +437,71 @@ class _FavoritesPageState extends State<FavoritesPage> {
                 ),
                 const SizedBox(height: 12),
 
-                // Rating
-                if (place.rating != null)
-                  Row(
-                    children: [
-                      ...List.generate(5, (index) {
-                        if (index < (place.rating ?? 0).floor()) {
-                          return const Icon(Icons.star, color: Color(0xFFFBBF24), size: 20);
-                        } else if (index < (place.rating ?? 0) && (place.rating ?? 0) % 1 != 0) {
-                          return const Icon(Icons.star_half, color: Color(0xFFFBBF24), size: 20);
-                        } else {
-                          return const Icon(Icons.star_outline, color: Color(0xFFFBBF24), size: 20);
-                        }
-                      }),
-                      const SizedBox(width: 8),
-                      Text(
-                        place.rating!.toStringAsFixed(1),
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                // Ratings Summary (matching homepage style)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (place.rating != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4.0),
+                        child: Row(
+                          children: [
+                            Icon(Icons.star, size: 16, color: Theme.of(context).colorScheme.onSurface),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${place.rating!.toStringAsFixed(1)} (Google, ${place.userRatingsTotal ?? 0} reviews)',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Theme.of(context).colorScheme.onSurface,
+                                fontFamily: 'Inter',
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      if (place.userRatingsTotal != null)
-                        Text(
-                          ' (${place.userRatingsTotal})',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                    ],
-                  ),
+                    FutureBuilder<Map<String, dynamic>>(
+                      future: _getAgoraStats(place.placeId ?? ''),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const SizedBox.shrink();
+                        }
+                        final stats = snapshot.data;
+                        if (stats == null || stats['count'] == 0) {
+                          return Row(
+                            children: [
+                              Icon(Icons.star_border, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                              const SizedBox(width: 4),
+                              Text(
+                                'No Agora reviews yet',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                  fontFamily: 'Inter',
+                                ),
+                              ),
+                            ],
+                          );
+                        }
+                        return Row(
+                          children: [
+                            Icon(Icons.star, size: 16, color: Theme.of(context).colorScheme.primary),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${stats['rating'].toStringAsFixed(1)} (Agora, ${stats['count']} reviews)',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Theme.of(context).colorScheme.onSurface,
+                                fontFamily: 'Inter',
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 8),
 
                 // Location
@@ -455,13 +528,13 @@ class _FavoritesPageState extends State<FavoritesPage> {
     );
   }
 
-  Widget _buildPlaceholderImage() {
+  Widget _buildPlaceholderImage(String type) {
     return Container(
       height: 200,
       width: double.infinity,
       color: Colors.grey[300],
-      child: const Icon(
-        Icons.image,
+      child: Icon(
+        _getCategoryIcon(type),
         size: 80,
         color: Colors.grey,
       ),

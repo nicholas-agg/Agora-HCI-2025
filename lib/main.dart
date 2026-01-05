@@ -15,17 +15,11 @@ import 'theme.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Force the Latest Renderer to support Cloud Map IDs
+  // Use the default renderer; legacy is deprecated and no longer supported.
   final GoogleMapsFlutterPlatform mapsImplementation = GoogleMapsFlutterPlatform.instance;
   if (mapsImplementation is GoogleMapsFlutterAndroid) {
     mapsImplementation.useAndroidViewSurface = true;
-    try {
-      await mapsImplementation.initializeWithRenderer(AndroidMapRenderer.latest);
-      debugPrint('Maps renderer initialized: latest');
-    } catch (e) {
-      // Renderer already initialized (happens on hot restart)
-      debugPrint('Maps renderer already initialized: $e');
-    }
+    // No need to call initializeWithRenderer; default is used.
   }
 
   try {

@@ -1,7 +1,13 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import '../models/review.dart';
+import '../models/study_place.dart';
 import '../services/database_service.dart';
+import 'place_details_page.dart';
 
 class MyReviewsPage extends StatefulWidget {
   const MyReviewsPage({super.key});
@@ -20,6 +26,47 @@ class _MyReviewsPageState extends State<MyReviewsPage> {
   void initState() {
     super.initState();
     _fetchReviews();
+  }
+
+  Future<void> _fetchPlaceDetails(String placeId) async {
+    final apiKey = dotenv.env['GOOGLE_MAPS_API_KEY'];
+    try {
+      final url = 'https://maps.googleapis.com/maps/api/place/details/json?place_id=$placeId&fields=name,geometry,formatted_address,type,photos&key=$apiKey';
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'OK') {
+          final result = data['result'];
+          final name = result['name'] as String;
+          final lat = result['geometry']['location']['lat'] as double;
+          final lng = result['geometry']['location']['lng'] as double;
+          String? photoRef;
+          if (result['photos'] != null && (result['photos'] as List).isNotEmpty) {
+            photoRef = result['photos'][0]['photo_reference'];
+          }
+          final place = StudyPlace(
+            name,
+            LatLng(lat, lng),
+            'Study Place',
+            photoReference: photoRef,
+            placeId: placeId,
+          );
+          if (mounted) {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => PlaceDetailsPage(place: place),
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load place details: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _fetchReviews() async {
@@ -72,7 +119,10 @@ class _MyReviewsPageState extends State<MyReviewsPage> {
                       itemCount: _reviews.length,
                       itemBuilder: (context, index) {
                         final review = _reviews[index];
-                        return _buildReviewCard(review, colorScheme);
+                        return GestureDetector(
+                          onTap: () => _fetchPlaceDetails(review.placeId),
+                          child: _buildReviewCard(review, colorScheme),
+                        );
                       },
                     ),
     );
