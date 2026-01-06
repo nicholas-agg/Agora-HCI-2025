@@ -32,6 +32,11 @@ class _MyHomePageState extends State<MyHomePage> {
   double? _agoraAvgRating;
   int? _agoraReviewCount;
   bool _agoraReviewsLoading = false;
+
+  // Robustness tracking
+  bool _mapLoadFailed = false;
+  String? _mapErrorMessage;
+
   // Fetch Agora reviews for the selected place
   Future<void> _fetchAgoraReviewStats(String placeId) async {
     setState(() {
@@ -184,11 +189,15 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   BitmapDescriptor _getMarkerIconForType(String type) {
-    if (type.toLowerCase().contains('cafe') && _cafeIcon != null) return _cafeIcon!;
-    if (type.toLowerCase().contains('library') && _libraryIcon != null) return _libraryIcon!;
-    if (type.toLowerCase().contains('coworking') && _coworkingIcon != null) return _coworkingIcon!;
-    if (_otherIcon != null) return _otherIcon!;
-    // Fallback to default marker if icons not loaded yet
+    try {
+      if (type.toLowerCase().contains('cafe') && _cafeIcon != null) return _cafeIcon!;
+      if (type.toLowerCase().contains('library') && _libraryIcon != null) return _libraryIcon!;
+      if (type.toLowerCase().contains('coworking') && _coworkingIcon != null) return _coworkingIcon!;
+      if (_otherIcon != null) return _otherIcon!;
+    } catch (e) {
+      debugPrint('Error loading marker icon: $e');
+    }
+    // Fallback to default marker if icons not loaded yet or error
     return BitmapDescriptor.defaultMarker;
   }
 
@@ -467,6 +476,9 @@ class _MyHomePageState extends State<MyHomePage> {
   String? _getPhotoUrl(String? photoReference) {
     if (photoReference == null) return null;
     final apiKey = dotenv.env['GOOGLE_MAPS_API_KEY'];
+    if (apiKey == null || apiKey.isEmpty || apiKey == 'YOUR_API_KEY_HERE') {
+      return null;
+    }
     return 'https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=$photoReference&key=$apiKey';
   }
 
@@ -585,47 +597,91 @@ class _MyHomePageState extends State<MyHomePage> {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
         children: [
-          // 1. Full Screen Map with smooth transition
+          // 1. Full Screen Map with robust error handling
           Positioned.fill(
-            child: Builder(
-              builder: (context) {
-                final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-                return GoogleMap(
-                  cloudMapId: isDarkMode ? '2f87b85e986833829e30b116' : null,
-                  initialCameraPosition: CameraPosition(
-                    target: _currentCenter,
-                    zoom: _currentZoom,
+            child: _mapLoadFailed
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.map_outlined, size: 64, color: Colors.grey),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Map could not be loaded.',
+                          style: TextStyle(fontSize: 18, color: Colors.grey),
+                        ),
+                        if (_mapErrorMessage != null)
+                          Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Text(
+                              _mapErrorMessage!,
+                              style: const TextStyle(color: Colors.red),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                      ],
+                    ),
+                  )
+                : Builder(
+                    builder: (context) {
+                      final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+                      try {
+                        return GoogleMap(
+                          cloudMapId: isDarkMode ? '2f87b85e986833829e30b116' : null,
+                          initialCameraPosition: CameraPosition(
+                            target: _currentCenter,
+                            zoom: _currentZoom,
+                          ),
+                          myLocationEnabled: true,
+                          myLocationButtonEnabled: false,
+                          zoomControlsEnabled: false,
+                          markers: _places
+                              .map((place) {
+                                BitmapDescriptor icon;
+                                try {
+                                  icon = _getMarkerIconForType(place.type);
+                                } catch (e) {
+                                  icon = BitmapDescriptor.defaultMarker;
+                                }
+                                return Marker(
+                                  markerId: MarkerId(place.name),
+                                  position: place.location,
+                                  onTap: () {
+                                    setState(() {
+                                      _selectedPlace = place;
+                                    });
+                                    _fetchAgoraReviewStats(place.placeId ?? '');
+                                    _mapController?.animateCamera(
+                                      CameraUpdate.newLatLng(place.location),
+                                    );
+                                  },
+                                  icon: icon,
+                                );
+                              })
+                              .toSet(),
+                          onMapCreated: (controller) {
+                            _mapController = controller;
+                          },
+                          onTap: (_) {
+                            setState(() {
+                              _selectedPlace = null;
+                            });
+                          },
+                        );
+                      } catch (e) {
+                        debugPrint('Map Widget Error: $e');
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted && !_mapLoadFailed) {
+                            setState(() {
+                              _mapLoadFailed = true;
+                              _mapErrorMessage = e.toString();
+                            });
+                          }
+                        });
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                    },
                   ),
-                  myLocationEnabled: true,
-                  myLocationButtonEnabled: false,
-                  zoomControlsEnabled: false,
-                  markers: _places
-                      .map((place) => Marker(
-                            markerId: MarkerId(place.name),
-                            position: place.location,
-                            onTap: () {
-                              setState(() {
-                                _selectedPlace = place;
-                              });
-                              _fetchAgoraReviewStats(place.placeId ?? '');
-                              _mapController?.animateCamera(
-                                CameraUpdate.newLatLng(place.location),
-                              );
-                            },
-                            icon: _getMarkerIconForType(place.type),
-                          ))
-                      .toSet(),
-                  onMapCreated: (controller) {
-                    _mapController = controller;
-                  },
-                  onTap: (_) {
-                    setState(() {
-                      _selectedPlace = null;
-                    });
-                  },
-                );
-              },
-            ),
           ),
 
           // 2. Custom App Bar (Floating)

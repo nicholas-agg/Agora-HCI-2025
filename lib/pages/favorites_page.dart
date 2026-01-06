@@ -24,26 +24,31 @@ class _FavoritesPageState extends State<FavoritesPage> {
   List<StudyPlace> get _allFavorites => _favoritesManager.favorites;
 
   List<StudyPlace> get _filteredFavorites {
-    List<StudyPlace> filtered = _allFavorites;
-    if (_selectedFilter != 'All') {
-      filtered = filtered.where((place) {
-        final type = place.type.toLowerCase();
-        if (_selectedFilter == 'Library') {
-          return type.contains('library');
-        } else if (_selectedFilter == 'Cafe') {
-          return type.contains('cafe');
-        } else if (_selectedFilter == 'Coworking') {
-          return type.contains('coworking');
-        }
-        return true;
-      }).toList();
+    try {
+      List<StudyPlace> filtered = _allFavorites;
+      if (_selectedFilter != 'All') {
+        filtered = filtered.where((place) {
+          final type = place.type.toLowerCase();
+          if (_selectedFilter == 'Library') {
+            return type.contains('library');
+          } else if (_selectedFilter == 'Cafe') {
+            return type.contains('cafe');
+          } else if (_selectedFilter == 'Coworking') {
+            return type.contains('coworking');
+          }
+          return true;
+        }).toList();
+      }
+      if (_searchController.text.isNotEmpty) {
+        filtered = filtered.where((place) =>
+          place.name.toLowerCase().contains(_searchController.text.toLowerCase())
+        ).toList();
+      }
+      return filtered;
+    } catch (e) {
+      debugPrint('Error filtering favorites: $e');
+      return _allFavorites;
     }
-    if (_searchController.text.isNotEmpty) {
-      filtered = filtered.where((place) =>
-        place.name.toLowerCase().contains(_searchController.text.toLowerCase())
-      ).toList();
-    }
-    return filtered;
   }
 
   @override
@@ -105,6 +110,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
   String? _getPhotoUrl(String? photoReference) {
     if (photoReference == null) return null;
     final apiKey = dotenv.env['GOOGLE_MAPS_API_KEY'];
+    if (apiKey == null || apiKey.isEmpty || apiKey == 'YOUR_API_KEY_HERE') {
+      return null;
+    }
     return 'https://maps.googleapis.com/maps/api/place/photo?maxwidth=600&photoreference=$photoReference&key=$apiKey';
   }
 

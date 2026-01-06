@@ -35,12 +35,18 @@ class _EditProfilePageState extends State<EditProfilePage> {
   }
 
   Future<void> _loadProfilePictureLocal() async {
-    final prefs = await SharedPreferences.getInstance();
-    final path = prefs.getString('profile_picture_path');
-    if (mounted) {
-      setState(() {
-        _currentPhotoPath = path;
-      });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final path = prefs.getString('profile_picture_path');
+      if (path != null && await File(path).exists()) {
+        if (mounted) {
+          setState(() {
+            _currentPhotoPath = path;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading profile picture path: $e');
     }
   }
 
@@ -85,41 +91,62 @@ class _EditProfilePageState extends State<EditProfilePage> {
     try {
       // Re-authenticate if changing email or password
       if (_emailController.text != user.email || _newPasswordController.text.isNotEmpty) {
+        if (_currentPasswordController.text.isEmpty) {
+          setState(() { _error = 'Current password is required to change sensitive info.'; _loading = false; });
+          return;
+        }
         final cred = EmailAuthProvider.credential(
           email: user.email!,
           password: _currentPasswordController.text,
         );
         await user.reauthenticateWithCredential(cred);
       }
+      
       // Save profile picture path locally if selected
       if (_imageFile != null) {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('profile_picture_path', _imageFile!.path);
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('profile_picture_path', _imageFile!.path);
+        } catch (e) {
+          debugPrint('Failed to save profile picture path: $e');
+        }
       }
+      
       // Update display name
       if (_nameController.text != user.displayName && _nameController.text.isNotEmpty) {
         await user.updateDisplayName(_nameController.text);
       }
+      
       // Update email
       if (_emailController.text != user.email && _emailController.text.isNotEmpty) {
         await user.verifyBeforeUpdateEmail(_emailController.text);
+        if (mounted) {
+           ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('A verification email has been sent to your new email address.')),
+          );
+        }
       }
+      
       // Update password
       if (_newPasswordController.text.isNotEmpty) {
         await user.updatePassword(_newPasswordController.text);
       }
+      
       await user.reload();
       setState(() { _loading = false; });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile updated successfully!')),
+          const SnackBar(content: Text('Profile updated successfully!'), backgroundColor: Colors.green),
         );
         Navigator.of(context).pop();
       }
     } on FirebaseAuthException catch (e) {
-      setState(() { _error = e.message; _loading = false; });
+      String msg = e.message ?? 'An auth error occurred.';
+      if (e.code == 'wrong-password') msg = 'The current password you entered is incorrect.';
+      if (e.code == 'network-request-failed') msg = 'Network error. Please check your connection.';
+      setState(() { _error = msg; _loading = false; });
     } catch (e) {
-      setState(() { _error = 'An error occurred: $e'; _loading = false; });
+      setState(() { _error = 'An unexpected error occurred: $e'; _loading = false; });
     }
   }
 

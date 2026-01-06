@@ -44,12 +44,18 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _loadProfilePictureLocal() async {
-    final prefs = await SharedPreferences.getInstance();
-    final path = prefs.getString('profile_picture_path');
-    if (mounted) {
-      setState(() {
-        _profilePicturePath = path;
-      });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final path = prefs.getString('profile_picture_path');
+      if (path != null && await File(path).exists()) {
+        if (mounted) {
+          setState(() {
+            _profilePicturePath = path;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading profile picture path: $e');
     }
   }
 

@@ -18,8 +18,10 @@ void main() async {
   // Use the default renderer; legacy is deprecated and no longer supported.
   final GoogleMapsFlutterPlatform mapsImplementation = GoogleMapsFlutterPlatform.instance;
   if (mapsImplementation is GoogleMapsFlutterAndroid) {
-    mapsImplementation.useAndroidViewSurface = true;
-    // No need to call initializeWithRenderer; default is used.
+    // Disabled useAndroidViewSurface: Hybrid Composition can cause GPU hangs and 
+    // "Fence didn't signal" errors on some devices (especially Mali GPUs).
+    // Allowing the default rendering mode improves performance and stability.
+    mapsImplementation.useAndroidViewSurface = false;
   }
 
   try {

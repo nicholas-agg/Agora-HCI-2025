@@ -120,21 +120,28 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                   ),
                   ElevatedButton(
                     onPressed: () async {
-                      await _databaseService.updateReview(
-                        reviewId: review.id,
-                        rating: _editRating,
-                        outlets: _editOutlets,
-                        reviewText: _editReviewController.text.trim(),
-                      );
-                      if (!context.mounted) return;
-                      Navigator.of(context).pop();
-                      // Refresh user review
-                      _checkIfUserReviewed();
-                      setState(() {});
-                      if (!mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Review updated!'), backgroundColor: Colors.green),
-                      );
+                      try {
+                        await _databaseService.updateReview(
+                          reviewId: review.id,
+                          rating: _editRating,
+                          outlets: _editOutlets,
+                          reviewText: _editReviewController.text.trim(),
+                        );
+                        if (!context.mounted) return;
+                        Navigator.of(context).pop();
+                        // Refresh user review
+                        _checkIfUserReviewed();
+                        setState(() {});
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Review updated!'), backgroundColor: Colors.green),
+                        );
+                      } catch (e) {
+                         if (!context.mounted) return;
+                         ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Failed to update review: $e'), backgroundColor: Colors.red),
+                        );
+                      }
                     },
                     child: const Text('Save'),
                   ),
@@ -162,17 +169,24 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
               label: const Text('Delete'),
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
               onPressed: () async {
-                await _databaseService.deleteReview(review.id);
-                if (!dialogContext.mounted) return;
-                Navigator.of(dialogContext).pop();
-                setState(() {
-                  _hasReviewed = false;
-                  _userReview = null;
-                });
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Review deleted'), backgroundColor: Colors.red),
-                );
+                try {
+                  await _databaseService.deleteReview(review.id);
+                  if (!dialogContext.mounted) return;
+                  Navigator.of(dialogContext).pop();
+                  setState(() {
+                    _hasReviewed = false;
+                    _userReview = null;
+                  });
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Review deleted'), backgroundColor: Colors.red),
+                  );
+                } catch (e) {
+                   if (!dialogContext.mounted) return;
+                   ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to delete review: $e'), backgroundColor: Colors.red),
+                  );
+                }
               },
             ),
           ],
@@ -255,6 +269,9 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
   String? _getPhotoUrl(String? photoReference) {
     if (photoReference == null) return null;
     final apiKey = dotenv.env['GOOGLE_MAPS_API_KEY'];
+    if (apiKey == null || apiKey.isEmpty || apiKey == 'YOUR_API_KEY_HERE') {
+      return null;
+    }
     return 'https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference=$photoReference&key=$apiKey';
   }
 
