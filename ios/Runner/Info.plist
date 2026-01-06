@@ -46,7 +46,9 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>This app needs access to your microphone for voice search functionality.</string>
+	<string>This app needs access to your microphone for voice search and noise measurement.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>This app needs access to your camera to capture place photos.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>This app needs speech recognition to enable voice search for study places.</string>
 </dict>

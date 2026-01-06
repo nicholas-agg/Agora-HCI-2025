@@ -215,6 +215,60 @@ class DatabaseService {
     }
   }
 
+  // ==================== CHECK-INS ====================
+
+  Future<void> createCheckIn({
+    required String userId,
+    required String userName,
+    required String placeId,
+    required String placeName,
+    required LatLng placeLocation,
+    double? userLatitude,
+    double? userLongitude,
+    double? distanceMeters,
+    double? noiseDb,
+    String? photoUrl,
+  }) async {
+    try {
+      final data = {
+        'userId': userId,
+        'userName': userName,
+        'placeId': placeId,
+        'placeName': placeName,
+        'placeLatitude': placeLocation.latitude,
+        'placeLongitude': placeLocation.longitude,
+        'userLatitude': userLatitude,
+        'userLongitude': userLongitude,
+        'distanceMeters': distanceMeters,
+        'noiseDb': noiseDb,
+        'photoUrl': photoUrl,
+        'createdAt': FieldValue.serverTimestamp(),
+      };
+
+      await _firestore.collection('checkins').add(data);
+    } catch (e) {
+      throw Exception(_handleFirestoreError(e));
+    }
+  }
+
+  Future<bool> isCheckedIn({
+    required String userId,
+    required String placeId,
+  }) async {
+    try {
+      final query = await _firestore
+          .collection('checkins')
+          .where('userId', isEqualTo: userId)
+          .where('placeId', isEqualTo: placeId)
+          .orderBy('createdAt', descending: true)
+          .limit(1)
+          .get();
+      return query.docs.isNotEmpty;
+    } catch (e) {
+      return false;
+    }
+  }
+
   // Get average rating for a place from user reviews
   Future<double?> getPlaceAverageRating(String placeId) async {
     try {

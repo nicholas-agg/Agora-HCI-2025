@@ -1,9 +1,18 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
-import '../models/study_place.dart';
-import '../models/review.dart';
-import '../services/database_service.dart';
-import '../services/auth_service.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:geolocator/geolocator.dart';
+
+import '../models/review.dart';
+import '../models/study_place.dart';
+import '../services/auth_service.dart';
+import '../services/database_service.dart';
+import '../services/noise_service.dart';
+import '../services/storage_service.dart';
 
 class PlaceDetailsPage extends StatefulWidget {
   final StudyPlace place;
@@ -173,9 +182,24 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
   final TextEditingController _reviewController = TextEditingController();
   final DatabaseService _databaseService = DatabaseService();
   final AuthService _authService = AuthService();
+  final NoiseService _noiseService = NoiseService();
+  final ImagePicker _imagePicker = ImagePicker();
+  final StorageService _storageService = StorageService();
   int _selectedRating = 0;
   String _selectedOutlets = 'None'; // None, Few, A lot
   bool _submittingReview = false;
+
+  bool _isMeasuringNoise = false;
+  double? _lastNoiseDb;
+  String? _noiseError;
+
+  XFile? _capturedPhoto;
+  bool _pickingPhoto = false;
+  String? _photoError;
+
+  bool _checkingIn = false;
+  bool _checkedIn = false;
+  String? _checkInError;
 
   // Track if user already reviewed this place
   bool _hasReviewed = false;
@@ -185,6 +209,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
   void initState() {
     super.initState();
     _checkIfUserReviewed();
+    _checkIfCheckedIn();
   }
 
   Future<void> _checkIfUserReviewed() async {
@@ -208,9 +233,22 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
     }
   }
 
+  Future<void> _checkIfCheckedIn() async {
+    final user = _authService.currentUser;
+    final placeId = widget.place.placeId;
+    if (user == null || placeId == null) return;
+    final already = await _databaseService.isCheckedIn(userId: user.uid, placeId: placeId);
+    if (!mounted) return;
+    setState(() {
+      _checkedIn = already;
+    });
+  }
+
   @override
   void dispose() {
     _reviewController.dispose();
+    _editReviewController.dispose();
+    _noiseService.dispose();
     super.dispose();
   }
 
@@ -228,12 +266,214 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
     return Icons.location_on;
   }
 
-  void _measureNoise() {
-    // TODO: Implement noise measurement functionality
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Noise measurement feature coming soon')),
+  Future<void> _measureNoise() async {
+    // Ask microphone permission before starting measurement
+    final micStatus = await Permission.microphone.request();
+    if (!micStatus.isGranted) {
+      if (!mounted) return;
+      setState(() {
+        _noiseError = 'Microphone permission is required.';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enable microphone permission to measure noise.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isMeasuringNoise = true;
+      _noiseError = null;
+    });
+
+    try {
+      final reading = await _noiseService.measureOnce();
+      if (!mounted) return;
+      setState(() {
+        _isMeasuringNoise = false;
+        _lastNoiseDb = reading;
+        if (reading == null) {
+          _noiseError = 'No reading captured. Try again.';
+        }
+      });
+    } on PlatformException catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isMeasuringNoise = false;
+        _noiseError = 'Microphone permission is required.';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enable microphone permission to measure noise.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isMeasuringNoise = false;
+        _noiseError = 'Noise measurement failed. Please try again.';
+      });
+    }
+  }
+
+  Future<void> _capturePlacePhoto() async {
+    // Ask camera permission before launching picker
+    final camStatus = await Permission.camera.request();
+    if (!camStatus.isGranted) {
+      if (!mounted) return;
+      setState(() {
+        _photoError = 'Camera permission is required.';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enable camera permission to take a photo.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _pickingPhoto = true;
+      _photoError = null;
+    });
+
+    try {
+      final picked = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 1600,
+        maxHeight: 1600,
+        imageQuality: 85,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _pickingPhoto = false;
+        if (picked != null) {
+          _capturedPhoto = picked;
+        } else {
+          _photoError = 'No photo captured. Try again.';
+        }
+      });
+    } on PlatformException catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _pickingPhoto = false;
+        _photoError = 'Camera permission is required.';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enable camera permission to take a photo.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _pickingPhoto = false;
+        _photoError = 'Failed to capture photo. Please try again.';
+      });
+    }
+  }
+
+  Future<void> _checkIn() async {
+    final user = _authService.currentUser;
+    final placeId = widget.place.placeId;
+
+    if (user == null || placeId == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in to check in.')),
+      );
+      return;
+    }
+
+    if (_checkedIn) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You are already checked in here.')),
+      );
+      return;
+    }
+
+    // Request location permission and fetch current location
+    final locPermission = await Geolocator.requestPermission();
+    if (locPermission == LocationPermission.denied ||
+        locPermission == LocationPermission.deniedForever) {
+      if (!mounted) return;
+      setState(() {
+        _checkInError = 'Location permission is required for check-in proximity validation.';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enable location permission to check in.')),
+      );
+      return;
+    }
+
+    Position? position;
+    try {
+      position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _checkInError = 'Failed to get current location.';
+      });
+      return;
+    }
+
+    final distanceMeters = Geolocator.distanceBetween(
+      position.latitude,
+      position.longitude,
+      widget.place.location.latitude,
+      widget.place.location.longitude,
     );
+
+    const allowedRadiusMeters = 200.0;
+    if (distanceMeters > allowedRadiusMeters) {
+      if (!mounted) return;
+      setState(() {
+        _checkInError = 'You are too far from this place to check in.';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Move closer to the place to check in.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _checkingIn = true;
+      _checkInError = null;
+    });
+
+    String? photoUrl;
+    try {
+      if (_capturedPhoto != null) {
+        photoUrl = await _storageService.uploadPlacePhoto(
+          file: _capturedPhoto!,
+          userId: user.uid,
+          placeId: placeId,
+        );
+      }
+
+      await _databaseService.createCheckIn(
+        userId: user.uid,
+        userName: user.displayName ?? 'Anonymous',
+        placeId: placeId,
+        placeName: widget.place.name,
+        placeLocation: widget.place.location,
+        userLatitude: position.latitude,
+        userLongitude: position.longitude,
+        distanceMeters: distanceMeters,
+        noiseDb: _lastNoiseDb,
+        photoUrl: photoUrl,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _checkingIn = false;
+        _checkedIn = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Checked in successfully!'), backgroundColor: Colors.green),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _checkingIn = false;
+        _checkInError = 'Check-in failed. Please try again.';
+      });
+    }
   }
 
   Future<void> _submitReview() async {
@@ -590,25 +830,275 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                // Measure Noise Button
-                Center(
-                  child: ElevatedButton.icon(
-                    onPressed: _measureNoise,
-                    icon: const Icon(Icons.volume_up, color: Colors.white),
-                    label: const Text(
-                      'Measure noise',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white,
-                      ),
+                // Place photo capture card
+                Card(
+                  elevation: 2,
+                  color: colorScheme.surface,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Place photo',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        if (_capturedPhoto != null)
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: Image.file(
+                              File(_capturedPhoto!.path),
+                              height: 180,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                            ),
+                          )
+                        else
+                          Container(
+                            height: 180,
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              color: colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: colorScheme.outlineVariant),
+                            ),
+                            child: const Center(
+                              child: Text('No photo yet'),
+                            ),
+                          ),
+                        if (_photoError != null) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            _photoError!,
+                            style: const TextStyle(color: Colors.red, fontSize: 12),
+                          ),
+                        ],
+                        const SizedBox(height: 12),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: ElevatedButton.icon(
+                            onPressed: _pickingPhoto ? null : _capturePlacePhoto,
+                            icon: const Icon(Icons.camera_alt),
+                            label: Text(
+                              _pickingPhoto ? 'Opening camera...' : 'Take photo',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF6750A4),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(100),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF6750A4),
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(100),
-                      ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Check-in card
+                Card(
+                  elevation: 2,
+                  color: colorScheme.surface,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Check in',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            CircleAvatar(
+                              backgroundColor: colorScheme.primaryContainer,
+                              child: const Icon(Icons.place, color: Colors.white),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _checkedIn ? 'You are checked in here' : 'Not checked in yet',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: colorScheme.onSurface,
+                                    ),
+                                  ),
+                                  Text(
+                                    _checkedIn
+                                        ? 'Great! Others can see your presence.'
+                                        : 'Tap to check in for your study session.',
+                                    style: TextStyle(color: colorScheme.onSurfaceVariant),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (_checkingIn)
+                              const SizedBox(
+                                height: 24,
+                                width: 24,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                          ],
+                        ),
+                        if (_checkInError != null) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            _checkInError!,
+                            style: const TextStyle(color: Colors.red, fontSize: 12),
+                          ),
+                        ],
+                        const SizedBox(height: 12),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: ElevatedButton.icon(
+                            onPressed: (_checkingIn || _checkedIn) ? null : _checkIn,
+                            icon: const Icon(Icons.login),
+                            label: Text(
+                              _checkedIn
+                                  ? 'Checked in'
+                                  : _checkingIn
+                                      ? 'Checking in...'
+                                      : 'Check in here',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF6750A4),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(100),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Noise measurement card
+                Card(
+                  elevation: 2,
+                  color: colorScheme.surface,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Noise level (dB)',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            CircleAvatar(
+                              backgroundColor: colorScheme.primaryContainer,
+                              child: const Icon(Icons.volume_up, color: Colors.white),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _lastNoiseDb != null
+                                        ? '${_lastNoiseDb!.toStringAsFixed(1)} dB'
+                                        : '-- dB',
+                                    style: TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w700,
+                                      color: colorScheme.onSurface,
+                                    ),
+                                  ),
+                                  Text(
+                                    _isMeasuringNoise
+                                        ? 'Measuring...'
+                                        : 'Tap to capture a snapshot',
+                                    style: TextStyle(
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (_isMeasuringNoise)
+                              const SizedBox(
+                                height: 24,
+                                width: 24,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                          ],
+                        ),
+                        if (_noiseError != null) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            _noiseError!,
+                            style: const TextStyle(color: Colors.red, fontSize: 12),
+                          ),
+                        ],
+                        const SizedBox(height: 12),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: ElevatedButton.icon(
+                            onPressed: _isMeasuringNoise ? null : _measureNoise,
+                            icon: const Icon(Icons.hearing),
+                            label: Text(
+                              _isMeasuringNoise ? 'Measuring...' : 'Measure noise',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF6750A4),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(100),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
