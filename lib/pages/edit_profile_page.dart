@@ -140,14 +140,34 @@ class _EditProfilePageState extends State<EditProfilePage> {
         );
         Navigator.of(context).pop();
       }
-    } on FirebaseAuthException catch (e) {
-      String msg = e.message ?? 'An auth error occurred.';
-      if (e.code == 'wrong-password') msg = 'The current password you entered is incorrect.';
-      if (e.code == 'network-request-failed') msg = 'Network error. Please check your connection.';
-      setState(() { _error = msg; _loading = false; });
     } catch (e) {
-      setState(() { _error = 'An unexpected error occurred: $e'; _loading = false; });
+      setState(() { 
+        _error = _getCleanErrorMessage(e); 
+        _loading = false; 
+      });
     }
+  }
+
+  String _getCleanErrorMessage(dynamic e) {
+    if (e is FirebaseAuthException) {
+      switch (e.code) {
+        case 'wrong-password':
+          return 'The current password you entered is incorrect.';
+        case 'network-request-failed':
+          return 'Network error. Please check your connection.';
+        case 'requires-recent-login':
+          return 'Please sign out and sign in again to perform this action.';
+        case 'too-many-requests':
+          return 'Too many attempts. Please try again later.';
+        default:
+          return e.message ?? 'An authentication error occurred.';
+      }
+    }
+    String errorMessage = e.toString();
+    if (errorMessage.startsWith('Exception: ')) {
+      errorMessage = errorMessage.substring(11);
+    }
+    return errorMessage;
   }
 
   @override

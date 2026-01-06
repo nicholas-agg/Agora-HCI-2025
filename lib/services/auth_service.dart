@@ -31,8 +31,12 @@ class AuthService {
       // 1. Update display name while still signed in
       await user.updateDisplayName(displayName);
 
-      // 2. Send email verification while still signed in
-      await user.sendEmailVerification();
+      final isDemoUser = email.toLowerCase() == 'demo@agora.com';
+
+      // 2. Send email verification while still signed in (skip for demo)
+      if (!isDemoUser) {
+        await user.sendEmailVerification();
+      }
 
       // 3. Create user document in Firestore
       final appUser = AppUser(
@@ -47,12 +51,14 @@ class AuthService {
           .doc(user.uid)
           .set(appUser.toFirestore());
 
-      // 4. Finally sign out so they must verify before accessing the app
-      await _auth.signOut();
+      // 4. Finally sign out so they must verify before accessing the app (skip for demo)
+      if (!isDemoUser) {
+        await _auth.signOut();
+      }
 
       return appUser;
     } on FirebaseAuthException catch (e) {
-      throw _handleAuthException(e);
+      throw Exception(_handleAuthException(e));
     } catch (e) {
       throw Exception(e.toString());
     }
@@ -77,8 +83,9 @@ class AuthService {
         password: password,
       );
 
-      // Block sign-in if email is not verified
-      if (!(credential.user?.emailVerified ?? false)) {
+      // Allow demo user to sign in without email verification
+      final isDemoUser = (credential.user?.email?.toLowerCase() ?? '') == 'demo@agora.com';
+      if (!isDemoUser && !(credential.user?.emailVerified ?? false)) {
         await credential.user?.sendEmailVerification();
         await _auth.signOut();
         throw Exception('Please verify your email address before signing in. A verification email has been sent.');
@@ -96,7 +103,7 @@ class AuthService {
 
       return null;
     } on FirebaseAuthException catch (e) {
-      throw _handleAuthException(e);
+      throw Exception(_handleAuthException(e));
     } catch (e) {
       throw Exception('Failed to sign in: $e');
     }
@@ -116,7 +123,7 @@ class AuthService {
     try {
       await _auth.sendPasswordResetEmail(email: email);
     } on FirebaseAuthException catch (e) {
-      throw _handleAuthException(e);
+      throw Exception(_handleAuthException(e));
     } catch (e) {
       throw Exception('Failed to send password reset email: $e');
     }
@@ -152,7 +159,7 @@ class AuthService {
       // Delete user from Firebase Auth
       await user.delete();
     } on FirebaseAuthException catch (e) {
-      throw _handleAuthException(e);
+      throw Exception(_handleAuthException(e));
     } catch (e) {
       throw Exception('Failed to delete account: $e');
     }

@@ -14,7 +14,6 @@ import '../services/database_service.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'dart:math';
-import 'dart:async';
 
 import 'dart:ui' as ui;
 import 'package:provider/provider.dart';
@@ -33,6 +32,11 @@ class _MyHomePageState extends State<MyHomePage> {
   double? _agoraAvgRating;
   int? _agoraReviewCount;
   bool _agoraReviewsLoading = false;
+
+  // Robustness tracking
+  bool _mapLoadFailed = false;
+  String? _mapErrorMessage;
+
   // Fetch Agora reviews for the selected place
   Future<void> _fetchAgoraReviewStats(String placeId) async {
     setState(() {
@@ -88,7 +92,6 @@ class _MyHomePageState extends State<MyHomePage> {
   late stt.SpeechToText _speech;
   bool _isListening = false;
   String _voiceText = '';
-  Timer? _debounce;
 
   @override
   void initState() {
@@ -186,11 +189,15 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   BitmapDescriptor _getMarkerIconForType(String type) {
-    if (type.toLowerCase().contains('cafe') && _cafeIcon != null) return _cafeIcon!;
-    if (type.toLowerCase().contains('library') && _libraryIcon != null) return _libraryIcon!;
-    if (type.toLowerCase().contains('coworking') && _coworkingIcon != null) return _coworkingIcon!;
-    if (_otherIcon != null) return _otherIcon!;
-    // Fallback to default marker if icons not loaded yet
+    try {
+      if (type.toLowerCase().contains('cafe') && _cafeIcon != null) return _cafeIcon!;
+      if (type.toLowerCase().contains('library') && _libraryIcon != null) return _libraryIcon!;
+      if (type.toLowerCase().contains('coworking') && _coworkingIcon != null) return _coworkingIcon!;
+      if (_otherIcon != null) return _otherIcon!;
+    } catch (e) {
+      debugPrint('Error loading marker icon: $e');
+    }
+    // Fallback to default marker if icons not loaded yet or error
     return BitmapDescriptor.defaultMarker;
   }
 
@@ -255,35 +262,29 @@ class _MyHomePageState extends State<MyHomePage> {
     });
     final apiKey = dotenv.env['GOOGLE_MAPS_API_KEY'];
     final location = '${center.latitude},${center.longitude}';
+    // Use a larger radius to cover more area
     final radius = 3000;
-    
-    // Combining searches into one Text Search call to reduce API costs by 3x
-    // SKU: Places Text Search is a flat fee per request, regardless of results
-    final query = Uri.encodeComponent('cafe OR library OR coworking');
-    final url = 'https://maps.googleapis.com/maps/api/place/textsearch/json?query=$query&location=$location&radius=$radius&key=$apiKey';
-    
+    final types = [
+      {'type': 'cafe'},
+      {'type': 'library'},
+      {'type': 'coworking_space', 'keyword': 'coworking'}
+    ];
     List<StudyPlace> allPlaces = [];
     try {
-      final response = await http.get(Uri.parse(url));
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['status'] == 'OK' || data['status'] == 'ZERO_RESULTS') {
-          if (data['results'] != null) {
+      for (var t in types) {
+        String url = 'https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=$location&radius=$radius&type=${t['type']}&key=$apiKey';
+        if (t['type'] == 'coworking_space') {
+          url = 'https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=$location&radius=$radius&keyword=coworking&key=$apiKey';
+        }
+        final response = await http.get(Uri.parse(url));
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data['status'] == 'OK') {
             for (var result in data['results']) {
               final name = result['name'];
               final lat = result['geometry']['location']['lat'];
               final lng = result['geometry']['location']['lng'];
-              
-              // Determine type from the types array returned by Google
-              final placeTypes = (result['types'] as List?)?.cast<String>() ?? [];
-              String type = 'Other';
-              if (placeTypes.contains('library')) {
-                type = 'Library';
-              } else if (placeTypes.any((t) => t.contains('coworking'))) {
-                type = 'Coworking';
-              } else if (placeTypes.contains('cafe')) {
-                type = 'Cafe';
-              }
+              final type = t['type'] == 'coworking_space' ? 'Coworking' : (t['type'] as String).replaceFirst((t['type'] as String)[0], (t['type'] as String)[0].toUpperCase());
               
               String? photoRef;
               if (result['photos'] != null && (result['photos'] as List).isNotEmpty) {
@@ -307,16 +308,10 @@ class _MyHomePageState extends State<MyHomePage> {
         } else {
           if (!mounted) return;
           setState(() {
-            _error = 'Google Maps API Error: ${data['status']}';
+            _error = 'Failed to fetch places (${t['type']})';
           });
         }
-      } else {
-        if (!mounted) return;
-        setState(() {
-          _error = 'Failed to fetch places (Status: ${response.statusCode})';
-        });
       }
-      
       // Prioritize: Coworking > Library > Cafe
       allPlaces.sort((a, b) {
         int rank(String type) {
@@ -327,7 +322,6 @@ class _MyHomePageState extends State<MyHomePage> {
         }
         return rank(a.type).compareTo(rank(b.type));
       });
-      
       if (!mounted) return;
       setState(() {
         _places = allPlaces;
@@ -336,7 +330,7 @@ class _MyHomePageState extends State<MyHomePage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'Network error: $e';
+        _error = 'Error: $e';
         _loading = false;
       });
     }
@@ -351,17 +345,9 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  void _onSearchChanged(String query) {
-    if (_debounce?.isActive ?? false) _debounce!.cancel();
-    _debounce = Timer(const Duration(milliseconds: 500), () {
-      _performSearch(query);
-    });
-  }
-
   Future<void> _performSearch(String query) async {
     if (!mounted) return;
-    final trimmedQuery = query.trim();
-    if (trimmedQuery.isEmpty) {
+    if (query.isEmpty) {
       setState(() {
         _isSearching = false;
         _searchResults = [];
@@ -374,21 +360,13 @@ class _MyHomePageState extends State<MyHomePage> {
       _searchResults = [];
     });
 
-    // 1. Search loaded pins first (No cost)
+    // 1. Search loaded pins first
     final localResults = _places.where((place) {
-      return place.name.toLowerCase().contains(trimmedQuery.toLowerCase()) ||
-             place.type.toLowerCase().contains(trimmedQuery.toLowerCase());
+      return place.name.toLowerCase().contains(query.toLowerCase()) ||
+             place.type.toLowerCase().contains(query.toLowerCase());
     }).toList();
 
     // 2. Search Google Places API for more results
-    // Only call API if local results are few AND query is long enough to reduce costs
-    if (localResults.length >= 5 || trimmedQuery.length < 3) {
-      setState(() {
-        _searchResults = localResults;
-      });
-      return;
-    }
-
     final apiKey = dotenv.env['GOOGLE_MAPS_API_KEY'];
     final location = '${_currentCenter.latitude},${_currentCenter.longitude}';
     final radius = 3000;
@@ -498,6 +476,9 @@ class _MyHomePageState extends State<MyHomePage> {
   String? _getPhotoUrl(String? photoReference) {
     if (photoReference == null) return null;
     final apiKey = dotenv.env['GOOGLE_MAPS_API_KEY'];
+    if (apiKey == null || apiKey.isEmpty || apiKey == 'YOUR_API_KEY_HERE') {
+      return null;
+    }
     return 'https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=$photoReference&key=$apiKey';
   }
 
@@ -527,34 +508,27 @@ class _MyHomePageState extends State<MyHomePage> {
     final apiKey = dotenv.env['GOOGLE_MAPS_API_KEY'];
     final location = '${center.latitude},${center.longitude}';
     final radius = _calculateRadius(bounds);
-    
-    // Combining searches into one Text Search call to reduce API costs by 3x
-    final query = Uri.encodeComponent('cafe OR library OR coworking');
-    final url = 'https://maps.googleapis.com/maps/api/place/textsearch/json?query=$query&location=$location&radius=${radius.round()}&key=$apiKey';
-    
+    final types = [
+      {'type': 'cafe'},
+      {'type': 'library'},
+      {'type': 'coworking_space', 'keyword': 'coworking'}
+    ];
     List<StudyPlace> allPlaces = [];
     try {
-      final response = await http.get(Uri.parse(url));
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['status'] == 'OK' || data['status'] == 'ZERO_RESULTS') {
-          if (data['results'] != null) {
+      for (var t in types) {
+        String url = 'https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=$location&radius=${radius.round()}&type=${t['type']}&key=$apiKey';
+        if (t['type'] == 'coworking_space') {
+          url = 'https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=$location&radius=${radius.round()}&keyword=coworking&key=$apiKey';
+        }
+        final response = await http.get(Uri.parse(url));
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data['status'] == 'OK') {
             for (var result in data['results']) {
               final name = result['name'];
               final lat = result['geometry']['location']['lat'];
               final lng = result['geometry']['location']['lng'];
-              
-              // Determine type from the types array returned by Google
-              final placeTypes = (result['types'] as List?)?.cast<String>() ?? [];
-              String type = 'Other';
-              if (placeTypes.contains('library')) {
-                type = 'Library';
-              } else if (placeTypes.any((t) => t.contains('coworking'))) {
-                type = 'Coworking';
-              } else if (placeTypes.contains('cafe')) {
-                type = 'Cafe';
-              }
-              
+              final type = t['type'] == 'coworking_space' ? 'Coworking' : (t['type'] as String).replaceFirst((t['type'] as String)[0], (t['type'] as String)[0].toUpperCase());
               String? photoRef;
               if (result['photos'] != null && (result['photos'] as List).isNotEmpty) {
                 photoRef = result['photos'][0]['photo_reference'];
@@ -580,16 +554,10 @@ class _MyHomePageState extends State<MyHomePage> {
         } else {
           if (!mounted) return;
           setState(() {
-            _error = 'Google Maps API Error: ${data['status']}';
+            _error = 'Failed to fetch places (${t['type']})';
           });
         }
-      } else {
-        if (!mounted) return;
-        setState(() {
-          _error = 'Failed to fetch places (Status: ${response.statusCode})';
-        });
       }
-      
       // Prioritize: Coworking > Library > Cafe
       allPlaces.sort((a, b) {
         int rank(String type) {
@@ -608,7 +576,7 @@ class _MyHomePageState extends State<MyHomePage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'Network error: $e';
+        _error = 'Error: $e';
         _loading = false;
       });
     }
@@ -629,53 +597,91 @@ class _MyHomePageState extends State<MyHomePage> {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
         children: [
-          // 1. Full Screen Map with smooth transition
+          // 1. Full Screen Map with robust error handling
           Positioned.fill(
-            child: Builder(
-              builder: (context) {
-                final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-                return AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 400),
-                  switchInCurve: Curves.easeIn,
-                  switchOutCurve: Curves.easeOut,
-                  child: GoogleMap(
-                    key: ValueKey(isDarkMode), // Key ensures AnimatedSwitcher detects the change
-                    cloudMapId: isDarkMode ? '2f87b85e986833829e30b116' : null,
-                    initialCameraPosition: CameraPosition(
-                      target: _currentCenter,
-                      zoom: _currentZoom,
+            child: _mapLoadFailed
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.map_outlined, size: 64, color: Colors.grey),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Map could not be loaded.',
+                          style: TextStyle(fontSize: 18, color: Colors.grey),
+                        ),
+                        if (_mapErrorMessage != null)
+                          Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Text(
+                              _mapErrorMessage!,
+                              style: const TextStyle(color: Colors.red),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                      ],
                     ),
-              myLocationEnabled: true,
-              myLocationButtonEnabled: false,
-              zoomControlsEnabled: false,
-              markers: _places
-                  .map((place) => Marker(
-                        markerId: MarkerId(place.name),
-                        position: place.location,
-                        onTap: () {
-                          setState(() {
-                            _selectedPlace = place;
-                          });
-                          _fetchAgoraReviewStats(place.placeId ?? '');
-                          _mapController?.animateCamera(
-                            CameraUpdate.newLatLng(place.location),
-                          );
-                        },
-                        icon: _getMarkerIconForType(place.type),
-                      ))
-                  .toSet(),
-              onMapCreated: (controller) {
-                _mapController = controller;
-              },
-              onTap: (_) {
-                setState(() {
-                  _selectedPlace = null;
-                });
-              },
+                  )
+                : Builder(
+                    builder: (context) {
+                      final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+                      try {
+                        return GoogleMap(
+                          cloudMapId: isDarkMode ? '2f87b85e986833829e30b116' : null,
+                          initialCameraPosition: CameraPosition(
+                            target: _currentCenter,
+                            zoom: _currentZoom,
+                          ),
+                          myLocationEnabled: true,
+                          myLocationButtonEnabled: false,
+                          zoomControlsEnabled: false,
+                          markers: _places
+                              .map((place) {
+                                BitmapDescriptor icon;
+                                try {
+                                  icon = _getMarkerIconForType(place.type);
+                                } catch (e) {
+                                  icon = BitmapDescriptor.defaultMarker;
+                                }
+                                return Marker(
+                                  markerId: MarkerId(place.name),
+                                  position: place.location,
+                                  onTap: () {
+                                    setState(() {
+                                      _selectedPlace = place;
+                                    });
+                                    _fetchAgoraReviewStats(place.placeId ?? '');
+                                    _mapController?.animateCamera(
+                                      CameraUpdate.newLatLng(place.location),
+                                    );
+                                  },
+                                  icon: icon,
+                                );
+                              })
+                              .toSet(),
+                          onMapCreated: (controller) {
+                            _mapController = controller;
+                          },
+                          onTap: (_) {
+                            setState(() {
+                              _selectedPlace = null;
+                            });
+                          },
+                        );
+                      } catch (e) {
+                        debugPrint('Map Widget Error: $e');
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted && !_mapLoadFailed) {
+                            setState(() {
+                              _mapLoadFailed = true;
+                              _mapErrorMessage = e.toString();
+                            });
+                          }
+                        });
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                    },
                   ),
-                );
-              },
-            ),
           ),
 
           // 2. Custom App Bar (Floating)
@@ -788,7 +794,7 @@ class _MyHomePageState extends State<MyHomePage> {
                             child: TextField(
                               controller: _searchController,
                               autofocus: true,
-                              onChanged: _onSearchChanged,
+                              onChanged: _performSearch,
                               decoration: InputDecoration(
                                 hintText: 'Search for a place to study',
                                 border: InputBorder.none,

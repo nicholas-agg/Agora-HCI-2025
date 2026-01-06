@@ -31,7 +31,9 @@ class _MyReviewsPageState extends State<MyReviewsPage> {
   Future<void> _fetchPlaceDetails(String placeId) async {
     final apiKey = dotenv.env['GOOGLE_MAPS_API_KEY'];
     try {
-      final url = 'https://maps.googleapis.com/maps/api/place/details/json?place_id=$placeId&fields=name,geometry,formatted_address,type,photos&key=$apiKey';
+      // Reduced fields to only what is essentially needed for StudyPlace model
+      // 'name', 'geometry', 'photos', 'type' are Basic Data (lowest cost tier)
+      final url = 'https://maps.googleapis.com/maps/api/place/details/json?place_id=$placeId&fields=name,geometry,type,photos&key=$apiKey';
       final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);

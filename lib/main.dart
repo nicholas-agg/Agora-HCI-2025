@@ -98,23 +98,21 @@ class _MyAppState extends State<MyApp> {
           }
           
           // Show loading screen while checking auth state
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Scaffold(
-              body: Center(
-                child: CircularProgressIndicator(),
-              ),
-            );
-          }
-          
-          // If user is logged in AND email is verified, show main navigation
-          if (snapshot.hasData && snapshot.data != null && snapshot.data!.emailVerified) {
-            return MainNavigation(
-              onLogout: () async {
-                await FavoritesManager().clearFavorites();
-                await _authService.signOut();
-              },
-              username: snapshot.data!.displayName ?? snapshot.data!.email ?? 'User',
-            );
+          // If user is logged in, show main navigation
+          // Regular users must have verified emails, demo user is exempted
+          if (snapshot.hasData && snapshot.data != null) {
+            final user = snapshot.data!;
+            final isDemoUser = (user.email?.toLowerCase() ?? '') == 'demo@agora.com';
+            
+            if (isDemoUser || user.emailVerified) {
+              return MainNavigation(
+                onLogout: () async {
+                  await FavoritesManager().clearFavorites();
+                  await _authService.signOut();
+                },
+                username: user.displayName ?? user.email ?? 'User',
+              );
+            }
           }
           
           // Otherwise (not logged in or not verified), show login page

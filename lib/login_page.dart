@@ -58,6 +58,14 @@ class _LoginPageState extends State<LoginPage> {
     // Convert demo username to valid email for Firebase compatibility
     final isDemoLogin = email.toLowerCase() == 'demo';
     if (isDemoLogin) {
+      if (password != 'agorademo') {
+        if (!mounted) return;
+        setState(() {
+          _error = 'Invalid email or password.';
+          _loading = false;
+        });
+        return;
+      }
       email = 'demo@agora.com';
     }
 
@@ -96,91 +104,31 @@ class _LoginPageState extends State<LoginPage> {
             password: password,
           );
         } on Exception catch (signInError) {
-          // If demo login fails, automatically create the demo account
-          if (isDemoLogin && (signInError.toString().contains('ERROR_INVALID_CREDENTIAL') || 
-              signInError.toString().contains('incorrect') || 
-              signInError.toString().contains('malformed') ||
-              signInError.toString().contains('expired') ||
-              signInError.toString().contains('user not found') ||
-              signInError.toString().contains('user-not-found'))) {
-            try {
-              await _authService.signUp(
-                email: email,
-                password: password,
-                displayName: 'Demo User',
-              );
-              // Demo account created, but user must verify email before accessing app
-              if (!mounted) return;
-              setState(() {
-                _loading = false;
-                _error = null;
-              });
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Demo account created! Please check your email to verify before signing in.'),
-                  backgroundColor: Colors.green,
-                  duration: Duration(seconds: 5),
-                ),
-              );
-              return;
-            } on Exception catch (signUpError) {
-              // If signup also fails, show error
-              if (!mounted) return;
-              setState(() {
-                _error = 'Failed to create demo account: ${signUpError.toString()}';
-                _loading = false;
-              });
-              return;
+          // If demo login fails (likely because it doesn't exist yet), create it silently
+          if (isDemoLogin) {
+            final errorStr = signInError.toString().toLowerCase();
+            if (errorStr.contains('no account found') || errorStr.contains('not found')) {
+              try {
+                await _authService.signUp(
+                  email: email,
+                  password: password,
+                  displayName: 'Demo User',
+                );
+                // signUp for demo doesn't sign out anymore, so we are now signed in
+                return;
+              } catch (signUpError) {
+                rethrow;
+              }
             }
-          } else {
-            rethrow;
           }
+          rethrow;
         }
       }
       // Navigation is handled automatically by StreamBuilder in main.dart
-    } on Exception catch (e) {
-      if (!mounted) return;
-      
-      String errorMessage = e.toString();
-      // Remove "Exception: " prefix if present
-      if (errorMessage.startsWith('Exception: ')) {
-        errorMessage = errorMessage.substring(11);
-      }
-      
-      String displayMessage;
-      String lowerError = errorMessage.toLowerCase();
-      
-      if (lowerError.contains('verify your email')) {
-        displayMessage = errorMessage;
-      } else if (lowerError.contains('invalid') && (lowerError.contains('credential') || lowerError.contains('password'))) {
-        displayMessage = 'Invalid email or password.';
-      } else if (lowerError.contains('user-not-found') || lowerError.contains('user not found')) {
-        displayMessage = 'No account found with this email.';
-      } else if (lowerError.contains('wrong-password') || lowerError.contains('incorrect')) {
-        displayMessage = 'Incorrect password.';
-      } else if (lowerError.contains('email-already-in-use') || lowerError.contains('already exists')) {
-        displayMessage = 'An account already exists with this email.';
-      } else if (lowerError.contains('weak-password') || lowerError.contains('too weak')) {
-        displayMessage = 'Password is too weak. Use at least 6 characters.';
-      } else if (lowerError.contains('invalid-email') || lowerError.contains('badly formatted')) {
-        displayMessage = 'Invalid email address format.';
-      } else if (lowerError.contains('network') || lowerError.contains('connection')) {
-        displayMessage = 'Network error. Please check your connection.';
-      } else if (lowerError.contains('too-many-requests')) {
-        displayMessage = 'Too many attempts. Please try again later.';
-      } else {
-        displayMessage = errorMessage;
-      }
-      
-      setState(() {
-        _error = displayMessage;
-        _loading = false;
-      });
     } catch (e) {
-      // Catch any other unexpected errors
       if (!mounted) return;
       setState(() {
-        _error = 'An unexpected error occurred: ${e.toString()}';
+        _error = _getCleanErrorMessage(e);
         _loading = false;
       });
     }
@@ -217,10 +165,18 @@ class _LoginPageState extends State<LoginPage> {
       );
     } catch (e) {
       setState(() {
-        _error = e.toString();
+        _error = _getCleanErrorMessage(e);
         _loading = false;
       });
     }
+  }
+
+  String _getCleanErrorMessage(dynamic e) {
+    String errorMessage = e.toString();
+    if (errorMessage.startsWith('Exception: ')) {
+      errorMessage = errorMessage.substring(11);
+    }
+    return errorMessage;
   }
 
   @override
