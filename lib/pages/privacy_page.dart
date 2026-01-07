@@ -20,9 +20,9 @@ class PrivacyPage extends StatelessWidget {
           children: [
             Text('Privacy & Security', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: colorScheme.onSurface)),
             const SizedBox(height: 16),
-            Text('This is a demo privacy page. Your data is not stored or shared. All features are for demonstration purposes only.', style: TextStyle(fontSize: 16, color: colorScheme.onSurfaceVariant)),
+            Text('Agora is committed to protecting your privacy. We only collect data necessary to provide and improve our services. Your data is never shared with third parties without your consent.', style: TextStyle(fontSize: 16, color: colorScheme.onSurfaceVariant)),
             const SizedBox(height: 24),
-            Text('For more information, contact us at demo@agora.com.', style: TextStyle(fontSize: 16, color: colorScheme.onSurfaceVariant)),
+            Text('For more information, contact us at nikgrava-agora@yahoo.gr.', style: TextStyle(fontSize: 16, color: colorScheme.onSurfaceVariant)),
           ],
         ),
       ),

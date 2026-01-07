@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -6,6 +7,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:noise_meter/noise_meter.dart';
 
 import '../models/review.dart';
 import '../models/study_place.dart';
@@ -36,6 +38,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
       _editRating = review.rating;
       _editOutlets = review.outlets;
       _editReviewController.text = review.reviewText;
+      if (!mounted) return;
       showDialog(
         context: context,
         builder: (dialogContext) {
@@ -127,17 +130,16 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                           outlets: _editOutlets,
                           reviewText: _editReviewController.text.trim(),
                         );
-                        if (!context.mounted) return;
+                        if (!mounted || !context.mounted) return;
                         Navigator.of(context).pop();
                         // Refresh user review
                         _checkIfUserReviewed();
                         setState(() {});
-                        if (!mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('Review updated!'), backgroundColor: Colors.green),
                         );
                       } catch (e) {
-                         if (!context.mounted) return;
+                         if (!mounted || !context.mounted) return;
                          ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(content: Text('Failed to update review: $e'), backgroundColor: Colors.red),
                         );
@@ -240,6 +242,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
       userReview = null;
     }
     if (userReview != null) {
+      if (!mounted) return;
       setState(() {
         _hasReviewed = true;
         _userReview = userReview;
@@ -284,7 +287,6 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
   }
 
   Future<void> _measureNoise() async {
-    // Ask microphone permission before starting measurement
     final micStatus = await Permission.microphone.request();
     if (!micStatus.isGranted) {
       if (!mounted) return;
@@ -292,41 +294,136 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
         _noiseError = 'Microphone permission is required.';
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enable microphone permission to measure noise.')),
+        SnackBar(content: Text(_noiseError!)),
       );
       return;
     }
 
     setState(() {
-      _isMeasuringNoise = true;
       _noiseError = null;
     });
 
-    try {
-      final reading = await _noiseService.measureOnce();
-      if (!mounted) return;
-      setState(() {
-        _isMeasuringNoise = false;
-        _lastNoiseDb = reading;
-        if (reading == null) {
-          _noiseError = 'No reading captured. Try again.';
-        }
-      });
-    } on PlatformException catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _isMeasuringNoise = false;
-        _noiseError = 'Microphone permission is required.';
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enable microphone permission to measure noise.')),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _isMeasuringNoise = false;
-        _noiseError = 'Noise measurement failed. Please try again.';
-      });
+    double? liveDb;
+    int secondsLeft = 10;
+    bool finished = false;
+    List<double> readings = [];
+    StreamSubscription<NoiseReading>? sub;
+    Timer? timer;
+
+    if (!mounted || !context.mounted) return;
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            // Start measurement on first build
+            if (sub == null) {
+              sub = _noiseService.noiseStream.listen(
+                (reading) {
+                  readings.add(reading.meanDecibel);
+                  setDialogState(() {
+                    liveDb = reading.meanDecibel;
+                  });
+                },
+                onError: (Object error, StackTrace stackTrace) {
+                  if (!finished) {
+                    finished = true;
+                    if (dialogContext.mounted) {
+                      Navigator.of(dialogContext).pop();
+                    }
+                    if (mounted) {
+                      setState(() {
+                        _noiseError = 'Noise measurement failed.';
+                      });
+                    }
+                  }
+                },
+                cancelOnError: true,
+              );
+              timer = Timer.periodic(const Duration(seconds: 1), (t) {
+                if (secondsLeft > 1) {
+                  setDialogState(() {
+                    secondsLeft--;
+                  });
+                } else {
+                  t.cancel();
+                  finished = true;
+                  sub?.cancel();
+                  sub = null;
+                  if (dialogContext.mounted) {
+                    Navigator.of(dialogContext).pop();
+                  }
+                }
+              });
+            }
+            final colorScheme = Theme.of(context).colorScheme;
+            return AlertDialog(
+              title: const Text('Measuring Noise'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Ambient sound level'),
+                  const SizedBox(height: 12),
+                  // Animated decibel value
+                  Text(
+                    liveDb != null ? '${liveDb!.toStringAsFixed(1)} dB' : '-- dB',
+                    style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: colorScheme.primary),
+                  ),
+                  const SizedBox(height: 8),
+                  LinearProgressIndicator(
+                    value: liveDb != null ? (liveDb!.clamp(30, 100) - 30) / 70 : 0,
+                    minHeight: 8,
+                    backgroundColor: colorScheme.surfaceContainerHighest,
+                    color: colorScheme.primary,
+                  ),
+                  const SizedBox(height: 16),
+                  Text('Time remaining: $secondsLeft s', style: TextStyle(fontSize: 16)),
+                  const SizedBox(height: 8),
+                  Text('Please stay quiet during measurement.', style: TextStyle(fontSize: 13, color: colorScheme.onSurfaceVariant)),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    finished = true;
+                    timer?.cancel();
+                    sub?.cancel();
+                    sub = null;
+                    Navigator.of(dialogContext).pop();
+                  },
+                  child: const Text('Cancel'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    timer?.cancel();
+    await sub?.cancel();
+    sub = null;
+    double? averageNoise;
+    if (readings.isNotEmpty) {
+      averageNoise = readings.reduce((a, b) => a + b) / readings.length;
+    }
+    if (!mounted) return;
+    setState(() {
+      _lastNoiseDb = averageNoise;
+      _isMeasuringNoise = false;
+    });
+    if (averageNoise != null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Average noise level: ${averageNoise.toStringAsFixed(1)} dB')),
+        );
+      }
+    } else if (_noiseError != null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_noiseError!)),
+        );
+      }
     }
   }
 
@@ -420,7 +517,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
 
     Position? position;
     try {
-      position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      position = await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high));
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -1252,7 +1349,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                         // Summary Card
                         Card(
                           elevation: 0,
-                          color: colorScheme.primaryContainer.withOpacity(0.3),
+                          color: colorScheme.primaryContainer.withValues(alpha: 0.3),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
                           ),

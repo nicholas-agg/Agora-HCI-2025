@@ -105,14 +105,14 @@ class _MyHomePageState extends State<MyHomePage> {
     // Helper to create a BitmapDescriptor from a Material icon
     Future<BitmapDescriptor> createIcon(IconData icon, Color color) async {
       // Medium pin for Google Maps scaling (logical: 80x98)
-      const double scale = 3.0;
+      const double scale = 0.3;
       final double width = 80 * scale, height = 98 * scale;
       final pictureRecorder = ui.PictureRecorder();
       final canvas = Canvas(pictureRecorder);
 
       // Draw shadow (bigger and more oval, like Google)
       final shadowPaint = Paint()
-        ..color = Colors.black.withOpacity(0.18)
+        ..color = Colors.black.withValues(alpha: 0.18)
         ..style = PaintingStyle.fill
         ..isAntiAlias = true;
       canvas.drawOval(
@@ -167,12 +167,12 @@ class _MyHomePageState extends State<MyHomePage> {
 
       // Downscale to target size for sharpness
       final image = await pictureRecorder.endRecording().toImage(width.toInt(), height.toInt());
-      final targetWidth = 80, targetHeight = 98;
+      final targetWidth = 10, targetHeight = 29;
       final resized = await image.toByteData(format: ui.ImageByteFormat.png);
       final codec = await ui.instantiateImageCodec(resized!.buffer.asUint8List(), targetWidth: targetWidth, targetHeight: targetHeight);
       final frame = await codec.getNextFrame();
       final bytes = await frame.image.toByteData(format: ui.ImageByteFormat.png);
-      return BitmapDescriptor.fromBytes(bytes!.buffer.asUint8List());
+      return BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
     }
 
     final cafeIcon = await createIcon(Icons.local_cafe, Colors.brown);

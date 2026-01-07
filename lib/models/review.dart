@@ -8,6 +8,7 @@ class Review {
   final String outlets;
   final String reviewText;
   final DateTime createdAt;
+  final String? photoReference;
 
   Review({
     required this.id,
@@ -19,6 +20,7 @@ class Review {
     required this.outlets,
     required this.reviewText,
     required this.createdAt,
+    this.photoReference,
   });
 
   // Create Review from Firestore document
@@ -33,6 +35,7 @@ class Review {
       outlets: data['outlets'] as String,
       reviewText: data['reviewText'] as String,
       createdAt: (data['createdAt'] as dynamic).toDate(),
+      photoReference: data['photoReference'] as String?,
     );
   }
 
@@ -47,6 +50,7 @@ class Review {
       'outlets': outlets,
       'reviewText': reviewText,
       'createdAt': createdAt,
+      if (photoReference != null) 'photoReference': photoReference,
     };
   }
 
@@ -62,6 +66,7 @@ class Review {
       outlets: json['outlets'] as String,
       reviewText: json['reviewText'] as String,
       createdAt: DateTime.parse(json['createdAt'] as String),
+      photoReference: json['photoReference'] as String?,
     );
   }
 
@@ -77,6 +82,7 @@ class Review {
       'outlets': outlets,
       'reviewText': reviewText,
       'createdAt': createdAt.toIso8601String(),
+      if (photoReference != null) 'photoReference': photoReference,
     };
   }
 }

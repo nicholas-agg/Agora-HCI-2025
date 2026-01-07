@@ -19,6 +19,7 @@ import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:provider/provider.dart';
 import '../services/theme_manager.dart';
+import 'recent_reviews_page.dart';
 
 class MyHomePage extends StatefulWidget {
   final VoidCallback onLogout;
@@ -109,7 +110,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
       // Draw shadow (bigger and more oval, like Google)
       final shadowPaint = Paint()
-        ..color = Colors.black.withOpacity(0.18)
+        ..color = Colors.black.withAlpha(100)
         ..style = PaintingStyle.fill
         ..isAntiAlias = true;
       canvas.drawOval(
@@ -256,35 +257,27 @@ class _MyHomePageState extends State<MyHomePage> {
     final apiKey = dotenv.env['GOOGLE_MAPS_API_KEY'];
     final location = '${center.latitude},${center.longitude}';
     final radius = 3000;
-    
-    // Combining searches into one Text Search call to reduce API costs by 3x
-    // SKU: Places Text Search is a flat fee per request, regardless of results
-    final query = Uri.encodeComponent('cafe OR library OR coworking');
-    final url = 'https://maps.googleapis.com/maps/api/place/textsearch/json?query=$query&location=$location&radius=$radius&key=$apiKey';
-    
+    final types = [
+      {'type': 'cafe'},
+      {'type': 'library'},
+      {'type': 'coworking_space', 'keyword': 'coworking'}
+    ];
     List<StudyPlace> allPlaces = [];
     try {
-      final response = await http.get(Uri.parse(url));
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['status'] == 'OK' || data['status'] == 'ZERO_RESULTS') {
-          if (data['results'] != null) {
+      for (var t in types) {
+        String url = 'https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=$location&radius=$radius&type=${t['type']}&key=$apiKey';
+        if (t['type'] == 'coworking_space') {
+          url = 'https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=$location&radius=$radius&keyword=coworking&key=$apiKey';
+        }
+        final response = await http.get(Uri.parse(url));
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data['status'] == 'OK') {
             for (var result in data['results']) {
               final name = result['name'];
               final lat = result['geometry']['location']['lat'];
               final lng = result['geometry']['location']['lng'];
-              
-              // Determine type from the types array returned by Google
-              final placeTypes = (result['types'] as List?)?.cast<String>() ?? [];
-              String type = 'Other';
-              if (placeTypes.contains('library')) {
-                type = 'Library';
-              } else if (placeTypes.any((t) => t.contains('coworking'))) {
-                type = 'Coworking';
-              } else if (placeTypes.contains('cafe')) {
-                type = 'Cafe';
-              }
-              
+              final type = t['type'] == 'coworking_space' ? 'Coworking' : (t['type'] as String).replaceFirst((t['type'] as String)[0], (t['type'] as String)[0].toUpperCase());
               String? photoRef;
               if (result['photos'] != null && (result['photos'] as List).isNotEmpty) {
                 photoRef = result['photos'][0]['photo_reference'];
@@ -307,16 +300,10 @@ class _MyHomePageState extends State<MyHomePage> {
         } else {
           if (!mounted) return;
           setState(() {
-            _error = 'Google Maps API Error: ${data['status']}';
+            _error = 'Failed to fetch places (${t['type']})';
           });
         }
-      } else {
-        if (!mounted) return;
-        setState(() {
-          _error = 'Failed to fetch places (Status: ${response.statusCode})';
-        });
       }
-      
       // Prioritize: Coworking > Library > Cafe
       allPlaces.sort((a, b) {
         int rank(String type) {
@@ -327,7 +314,6 @@ class _MyHomePageState extends State<MyHomePage> {
         }
         return rank(a.type).compareTo(rank(b.type));
       });
-      
       if (!mounted) return;
       setState(() {
         _places = allPlaces;
@@ -336,7 +322,90 @@ class _MyHomePageState extends State<MyHomePage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'Network error: $e';
+        _error = 'Error: $e';
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _fetchPlacesInBounds(LatLngBounds bounds, LatLng center) async {
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    final apiKey = dotenv.env['GOOGLE_MAPS_API_KEY'];
+    final location = '${center.latitude},${center.longitude}';
+    final radius = _calculateRadius(bounds);
+    final types = [
+      {'type': 'cafe'},
+      {'type': 'library'},
+      {'type': 'coworking_space', 'keyword': 'coworking'}
+    ];
+    List<StudyPlace> allPlaces = [];
+    try {
+      for (var t in types) {
+        String url = 'https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=$location&radius=${radius.round()}&type=${t['type']}&key=$apiKey';
+        if (t['type'] == 'coworking_space') {
+          url = 'https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=$location&radius=${radius.round()}&keyword=coworking&key=$apiKey';
+        }
+        final response = await http.get(Uri.parse(url));
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data['status'] == 'OK') {
+            for (var result in data['results']) {
+              final name = result['name'];
+              final lat = result['geometry']['location']['lat'];
+              final lng = result['geometry']['location']['lng'];
+              final type = t['type'] == 'coworking_space' ? 'Coworking' : (t['type'] as String).replaceFirst((t['type'] as String)[0], (t['type'] as String)[0].toUpperCase());
+              String? photoRef;
+              if (result['photos'] != null && (result['photos'] as List).isNotEmpty) {
+                photoRef = result['photos'][0]['photo_reference'];
+              }
+              final placeId = result['place_id'];
+              final rating = result['rating']?.toDouble();
+              final userRatingsTotal = result['user_ratings_total']?.toInt();
+              final place = StudyPlace(
+                name,
+                LatLng(lat, lng),
+                type,
+                photoReference: photoRef,
+                placeId: placeId,
+                rating: rating,
+                userRatingsTotal: userRatingsTotal,
+              );
+              // Only add if inside visible bounds
+              if (_isLatLngInBounds(LatLng(lat, lng), bounds)) {
+                allPlaces.add(place);
+              }
+            }
+          }
+        } else {
+          if (!mounted) return;
+          setState(() {
+            _error = 'Failed to fetch places (${t['type']})';
+          });
+        }
+      }
+      // Prioritize: Coworking > Library > Cafe
+      allPlaces.sort((a, b) {
+        int rank(String type) {
+          if (type.toLowerCase().contains('coworking')) return 0;
+          if (type.toLowerCase().contains('library')) return 1;
+          if (type.toLowerCase().contains('cafe')) return 2;
+          return 3;
+        }
+        return rank(a.type).compareTo(rank(b.type));
+      });
+      if (!mounted) return;
+      setState(() {
+        _places = allPlaces;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Error: $e';
         _loading = false;
       });
     }
@@ -382,7 +451,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
     // 2. Search Google Places API for more results
     // Only call API if local results are few AND query is long enough to reduce costs
-    if (localResults.length >= 5 || trimmedQuery.length < 3) {
+    if (localResults.length >= 15 || trimmedQuery.length < 3) {
       setState(() {
         _searchResults = localResults;
       });
@@ -391,7 +460,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
     final apiKey = dotenv.env['GOOGLE_MAPS_API_KEY'];
     final location = '${_currentCenter.latitude},${_currentCenter.longitude}';
-    final radius = 3000;
+    final radius = 5000;
     // Removed unused 'types' variable
     List<StudyPlace> apiResults = [];
     try {
@@ -402,22 +471,36 @@ class _MyHomePageState extends State<MyHomePage> {
         final data = json.decode(response.body);
         if (data['status'] == 'OK') {
           for (var result in data['results']) {
-            // Only include relevant types
+            // Include everything matched by Google if explicitly searched
+            // or filter loosely to include anything that might be a study spot
             final placeTypes = (result['types'] as List).cast<String>();
-            if (!placeTypes.any((t) => t.contains('cafe') || t.contains('library') || t.contains('coworking'))) {
-              continue;
-            }
-            final name = result['name'];
+            final name = result['name'].toLowerCase();
+            
+            bool isRelevant = placeTypes.any((t) => 
+              t.contains('cafe') || 
+              t.contains('library') || 
+              t.contains('coworking') ||
+              t.contains('university') ||
+              t.contains('school') ||
+              t.contains('book_store') ||
+              t.contains('establishment')
+            ) || name.contains('study') || name.contains('office') || name.contains('work');
+
+            if (!isRelevant) continue;
+
             final lat = result['geometry']['location']['lat'];
             final lng = result['geometry']['location']['lng'];
+            
+            // Refined type detection
             String type = 'Other';
-            if (placeTypes.contains('cafe')) {
-              type = 'Cafe';
-            } else if (placeTypes.contains('library')) {
+            if (placeTypes.contains('library') || name.contains('library')) {
               type = 'Library';
-            } else if (placeTypes.any((t) => t.contains('coworking'))) {
+            } else if (placeTypes.any((t) => t.contains('coworking')) || name.contains('coworking') || name.contains('work')) {
               type = 'Coworking';
+            } else if (placeTypes.contains('cafe') || name.contains('cafe') || name.contains('coffee')) {
+              type = 'Cafe';
             }
+            
             String? photoRef;
             if (result['photos'] != null && (result['photos'] as List).isNotEmpty) {
               photoRef = result['photos'][0]['photo_reference'];
@@ -428,7 +511,7 @@ class _MyHomePageState extends State<MyHomePage> {
             // Avoid duplicates with loaded pins
             if (_places.any((p) => p.placeId == placeId)) continue;
             apiResults.add(StudyPlace(
-              name,
+              result['name'],
               LatLng(lat, lng),
               type,
               photoReference: photoRef,
@@ -518,102 +601,6 @@ class _MyHomePageState extends State<MyHomePage> {
     return distance / 2; // half diagonal as radius
   }
 
-  Future<void> _fetchPlacesInBounds(LatLngBounds bounds, LatLng center) async {
-    if (!mounted) return;
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    final apiKey = dotenv.env['GOOGLE_MAPS_API_KEY'];
-    final location = '${center.latitude},${center.longitude}';
-    final radius = _calculateRadius(bounds);
-    
-    // Combining searches into one Text Search call to reduce API costs by 3x
-    final query = Uri.encodeComponent('cafe OR library OR coworking');
-    final url = 'https://maps.googleapis.com/maps/api/place/textsearch/json?query=$query&location=$location&radius=${radius.round()}&key=$apiKey';
-    
-    List<StudyPlace> allPlaces = [];
-    try {
-      final response = await http.get(Uri.parse(url));
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['status'] == 'OK' || data['status'] == 'ZERO_RESULTS') {
-          if (data['results'] != null) {
-            for (var result in data['results']) {
-              final name = result['name'];
-              final lat = result['geometry']['location']['lat'];
-              final lng = result['geometry']['location']['lng'];
-              
-              // Determine type from the types array returned by Google
-              final placeTypes = (result['types'] as List?)?.cast<String>() ?? [];
-              String type = 'Other';
-              if (placeTypes.contains('library')) {
-                type = 'Library';
-              } else if (placeTypes.any((t) => t.contains('coworking'))) {
-                type = 'Coworking';
-              } else if (placeTypes.contains('cafe')) {
-                type = 'Cafe';
-              }
-              
-              String? photoRef;
-              if (result['photos'] != null && (result['photos'] as List).isNotEmpty) {
-                photoRef = result['photos'][0]['photo_reference'];
-              }
-              final placeId = result['place_id'];
-              final rating = result['rating']?.toDouble();
-              final userRatingsTotal = result['user_ratings_total']?.toInt();
-              final place = StudyPlace(
-                name,
-                LatLng(lat, lng),
-                type,
-                photoReference: photoRef,
-                placeId: placeId,
-                rating: rating,
-                userRatingsTotal: userRatingsTotal,
-              );
-              // Only add if inside visible bounds
-              if (_isLatLngInBounds(LatLng(lat, lng), bounds)) {
-                allPlaces.add(place);
-              }
-            }
-          }
-        } else {
-          if (!mounted) return;
-          setState(() {
-            _error = 'Google Maps API Error: ${data['status']}';
-          });
-        }
-      } else {
-        if (!mounted) return;
-        setState(() {
-          _error = 'Failed to fetch places (Status: ${response.statusCode})';
-        });
-      }
-      
-      // Prioritize: Coworking > Library > Cafe
-      allPlaces.sort((a, b) {
-        int rank(String type) {
-          if (type.toLowerCase().contains('coworking')) return 0;
-          if (type.toLowerCase().contains('library')) return 1;
-          if (type.toLowerCase().contains('cafe')) return 2;
-          return 3;
-        }
-        return rank(a.type).compareTo(rank(b.type));
-      });
-      if (!mounted) return;
-      setState(() {
-        _places = allPlaces;
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = 'Network error: $e';
-        _loading = false;
-      });
-    }
-  }
-
   bool _isLatLngInBounds(LatLng point, LatLngBounds bounds) {
     final lat = point.latitude;
     final lng = point.longitude;
@@ -675,6 +662,24 @@ class _MyHomePageState extends State<MyHomePage> {
                   ),
                 );
               },
+            ),
+          ),
+          // Recent Reviews Button (bottom left)
+          Positioned(
+            bottom: 24,
+            left: 24,
+            child: FloatingActionButton.extended(
+              heroTag: 'recentReviews',
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const RecentReviewsPage()),
+                );
+              },
+              icon: const Icon(Icons.forum_outlined),
+              label: const Text('See Recent Reviews'),
+              backgroundColor: colorScheme.primary,
+              foregroundColor: colorScheme.onPrimary,
+              elevation: 4,
             ),
           ),
 

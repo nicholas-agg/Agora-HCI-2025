@@ -107,6 +107,10 @@ class _MyReviewsPageState extends State<MyReviewsPage> {
       appBar: AppBar(
         backgroundColor: colorScheme.surface,
         elevation: 1,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: colorScheme.onSurface),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
         title: const Text('My Reviews', style: TextStyle(fontWeight: FontWeight.w600)),
         centerTitle: true,
       ),

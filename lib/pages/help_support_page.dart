@@ -20,9 +20,9 @@ class HelpSupportPage extends StatelessWidget {
           children: [
             Text('Help & Support', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: colorScheme.onSurface)),
             const SizedBox(height: 16),
-            Text('This is a demo help and support page. For any issues or questions, please contact us at demo@agora.com.', style: TextStyle(fontSize: 16, color: colorScheme.onSurfaceVariant)),
+            Text('If you have any questions or need assistance, please reach out to us. Our team is dedicated to ensuring you have the best experience with Agora.', style: TextStyle(fontSize: 16, color: colorScheme.onSurfaceVariant)),
             const SizedBox(height: 24),
-            Text('We are here to help you with any problems you encounter while using the demo app.', style: TextStyle(fontSize: 16, color: colorScheme.onSurfaceVariant)),
+            Text('For help and support, contact us at nikgrava-agora@yahoo.gr.', style: TextStyle(fontSize: 16, color: colorScheme.onSurfaceVariant)),
           ],
         ),
       ),
