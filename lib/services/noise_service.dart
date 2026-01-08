@@ -58,4 +58,22 @@ class NoiseService {
     await _subscription?.cancel();
     _subscription = null;
   }
+
+  // Get noise level category
+  static String getNoiseCategory(double decibels) {
+    if (decibels < 40) return 'Very Quiet';
+    if (decibels < 50) return 'Quiet';
+    if (decibels < 60) return 'Moderate';
+    if (decibels < 70) return 'Noisy';
+    return 'Very Noisy';
+  }
+
+  // Get color for noise level
+  static String getNoiseCategoryColor(double decibels) {
+    if (decibels < 40) return '#4CAF50'; // Green
+    if (decibels < 50) return '#8BC34A'; // Light Green
+    if (decibels < 60) return '#FFC107'; // Amber
+    if (decibels < 70) return '#FF9800'; // Orange
+    return '#F44336'; // Red
+  }
 }

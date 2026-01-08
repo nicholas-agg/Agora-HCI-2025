@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+
 import '../models/review.dart';
+import '../services/user_display_name_cache.dart';
 
 import '../models/study_place.dart';
 import 'place_details_page.dart';
@@ -72,11 +74,23 @@ class RecentReviewsPage extends StatelessWidget {
                             Icon(Icons.person, color: Theme.of(context).colorScheme.primary),
                             const SizedBox(width: 8),
                             Expanded(
-                              child: Text(
-                                r.userName,
-                                style: const TextStyle(fontWeight: FontWeight.bold),
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                              child: r.userId != null
+                                  ? FutureBuilder<String>(
+                                      future: UserDisplayNameCache().getDisplayName(r.userId!),
+                                      builder: (context, snapshot) {
+                                        final name = snapshot.data ?? '...';
+                                        return Text(
+                                          name,
+                                          style: const TextStyle(fontWeight: FontWeight.bold),
+                                          overflow: TextOverflow.ellipsis,
+                                        );
+                                      },
+                                    )
+                                  : Text(
+                                      r.displayName ?? 'Anonymous',
+                                      style: const TextStyle(fontWeight: FontWeight.bold),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                             ),
                             const SizedBox(width: 8),
                             Text(_formatDate(r.createdAt), style: const TextStyle(fontSize: 12, color: Colors.grey)),

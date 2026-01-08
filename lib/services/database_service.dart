@@ -4,6 +4,8 @@ import '../models/review.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class DatabaseService {
+    // (No longer needed) Update all reviews for a user with a new userName
+    // Future<void> updateUserNameInReviews(String userId, String newUserName) async {}
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   // Helper method to handle Firestore errors
@@ -122,23 +124,35 @@ class DatabaseService {
   // Create a new review
   Future<void> createReview({
     required String userId,
-    required String userName,
     required String placeId,
     required String placeName,
     required int rating,
     required String outlets,
     required String reviewText,
+    int? wifiQuality,
+    int? outletAvailability,
+    String? averagePrice,
+    double? noiseLevel,
+    int? comfortLevel,
+    int? aestheticRating,
+    List<String>? userPhotos,
   }) async {
     try {
       final review = {
         'userId': userId,
-        'userName': userName,
         'placeId': placeId,
         'placeName': placeName,
         'rating': rating,
         'outlets': outlets,
         'reviewText': reviewText,
         'createdAt': FieldValue.serverTimestamp(),
+        if (wifiQuality != null) 'wifiQuality': wifiQuality,
+        if (outletAvailability != null) 'outletAvailability': outletAvailability,
+        if (averagePrice != null) 'averagePrice': averagePrice,
+        if (noiseLevel != null) 'noiseLevel': noiseLevel,
+        if (comfortLevel != null) 'comfortLevel': comfortLevel,
+        if (aestheticRating != null) 'aestheticRating': aestheticRating,
+        if (userPhotos != null && userPhotos.isNotEmpty) 'userPhotos': userPhotos,
       };
 
       await _firestore.collection('reviews').add(review);
@@ -194,13 +208,31 @@ class DatabaseService {
     required int rating,
     required String outlets,
     required String reviewText,
+    int? wifiQuality,
+    int? outletAvailability,
+    String? averagePrice,
+    double? noiseLevel,
+    int? comfortLevel,
+    int? aestheticRating,
+    List<String>? userPhotos,
   }) async {
     try {
-      await _firestore.collection('reviews').doc(reviewId).update({
+      final updateData = {
         'rating': rating,
         'outlets': outlets,
         'reviewText': reviewText,
-      });
+      };
+      
+      // Add optional fields only if provided
+      if (wifiQuality != null) updateData['wifiQuality'] = wifiQuality;
+      if (outletAvailability != null) updateData['outletAvailability'] = outletAvailability;
+      if (averagePrice != null) updateData['averagePrice'] = averagePrice;
+      if (noiseLevel != null) updateData['noiseLevel'] = noiseLevel;
+      if (comfortLevel != null) updateData['comfortLevel'] = comfortLevel;
+      if (aestheticRating != null) updateData['aestheticRating'] = aestheticRating;
+      if (userPhotos != null) updateData['userPhotos'] = userPhotos;
+      
+      await _firestore.collection('reviews').doc(reviewId).update(updateData);
     } catch (e) {
       throw Exception('Failed to update review: $e');
     }
@@ -269,7 +301,7 @@ class DatabaseService {
     }
   }
 
-  // Get average rating for a place from user reviews
+  // Get average rating for a place from user reviews (with trust-based weighting)
   Future<double?> getPlaceAverageRating(String placeId) async {
     try {
       final snapshot = await _firestore
@@ -279,11 +311,113 @@ class DatabaseService {
 
       if (snapshot.docs.isEmpty) return null;
 
-      final ratings = snapshot.docs.map((doc) => doc.data()['rating'] as int).toList();
-      final sum = ratings.fold<int>(0, (prev, rating) => prev + rating);
-      return sum / ratings.length;
+      double totalWeightedRating = 0;
+      double totalWeight = 0;
+
+      for (var doc in snapshot.docs) {
+        final rating = doc.data()['rating'] as int;
+        final userId = doc.data()['userId'] as String;
+        
+        // Get user points for weighting
+        final userDoc = await _firestore.collection('users').doc(userId).get();
+        final userPoints = userDoc.data()?['points'] as int? ?? 0;
+        
+        // Calculate weight: 1.0 + (points/1000), capped at 1.5x
+        final weight = (1.0 + (userPoints / 1000)).clamp(1.0, 1.5);
+        
+        totalWeightedRating += rating * weight;
+        totalWeight += weight;
+      }
+
+      return totalWeight > 0 ? totalWeightedRating / totalWeight : null;
     } catch (e) {
       return null;
+    }
+  }
+
+  // Get place attribute averages
+  Future<Map<String, double?>> getPlaceAttributeAverages(String placeId) async {
+    try {
+      final snapshot = await _firestore
+          .collection('reviews')
+          .where('placeId', isEqualTo: placeId)
+          .get();
+
+      if (snapshot.docs.isEmpty) {
+        return {
+          'wifiQuality': null,
+          'outletAvailability': null,
+          'noiseLevel': null,
+          'comfortLevel': null,
+          'aestheticRating': null,
+        };
+      }
+
+      double wifiSum = 0, outletSum = 0, noiseSum = 0, comfortSum = 0, aestheticSum = 0;
+      int wifiCount = 0, outletCount = 0, noiseCount = 0, comfortCount = 0, aestheticCount = 0;
+
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        
+        if (data['wifiQuality'] != null) {
+          wifiSum += (data['wifiQuality'] as int).toDouble();
+          wifiCount++;
+        }
+        if (data['outletAvailability'] != null) {
+          outletSum += (data['outletAvailability'] as int).toDouble();
+          outletCount++;
+        }
+        if (data['noiseLevel'] != null) {
+          noiseSum += data['noiseLevel'] as double;
+          noiseCount++;
+        }
+        if (data['comfortLevel'] != null) {
+          comfortSum += (data['comfortLevel'] as int).toDouble();
+          comfortCount++;
+        }
+        if (data['aestheticRating'] != null) {
+          aestheticSum += (data['aestheticRating'] as int).toDouble();
+          aestheticCount++;
+        }
+      }
+
+      return {
+        'wifiQuality': wifiCount > 0 ? wifiSum / wifiCount : null,
+        'outletAvailability': outletCount > 0 ? outletSum / outletCount : null,
+        'noiseLevel': noiseCount > 0 ? noiseSum / noiseCount : null,
+        'comfortLevel': comfortCount > 0 ? comfortSum / comfortCount : null,
+        'aestheticRating': aestheticCount > 0 ? aestheticSum / aestheticCount : null,
+      };
+    } catch (e) {
+      return {
+        'wifiQuality': null,
+        'outletAvailability': null,
+        'noiseLevel': null,
+        'comfortLevel': null,
+        'aestheticRating': null,
+      };
+    }
+  }
+
+  // Get all user photos for a place
+  Future<List<String>> getPlacePhotos(String placeId) async {
+    try {
+      final snapshot = await _firestore
+          .collection('reviews')
+          .where('placeId', isEqualTo: placeId)
+          .get();
+
+      List<String> allPhotos = [];
+      for (var doc in snapshot.docs) {
+        final photos = doc.data()['userPhotos'] as List?;
+        if (photos != null) {
+          allPhotos.addAll(photos.cast<String>());
+        }
+      }
+
+      return allPhotos;
+    } catch (e) {
+      return [];
     }
   }
 

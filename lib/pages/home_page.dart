@@ -21,6 +21,8 @@ import 'package:provider/provider.dart';
 import '../services/theme_manager.dart';
 import 'recent_reviews_page.dart';
 
+import 'recommendations_page.dart';
+
 class MyHomePage extends StatefulWidget {
   final VoidCallback onLogout;
   final String username;
@@ -31,6 +33,7 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   double? _agoraAvgRating;
   int? _agoraReviewCount;
   bool _agoraReviewsLoading = false;
@@ -63,7 +66,7 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-    // Removed unused _darkMapStyle
+  // Removed unused _darkMapStyle
   LatLng _currentCenter = const LatLng(37.9838, 23.7275); // Default to Athens
   final double _currentZoom = 13;
   List<StudyPlace> _places = [];
@@ -164,12 +167,21 @@ class _MyHomePageState extends State<MyHomePage> {
       );
 
       // Downscale to target size for sharpness
-      final image = await pictureRecorder.endRecording().toImage(width.toInt(), height.toInt());
+      final image = await pictureRecorder.endRecording().toImage(
+        width.toInt(),
+        height.toInt(),
+      );
       final targetWidth = 80, targetHeight = 98;
       final resized = await image.toByteData(format: ui.ImageByteFormat.png);
-      final codec = await ui.instantiateImageCodec(resized!.buffer.asUint8List(), targetWidth: targetWidth, targetHeight: targetHeight);
+      final codec = await ui.instantiateImageCodec(
+        resized!.buffer.asUint8List(),
+        targetWidth: targetWidth,
+        targetHeight: targetHeight,
+      );
       final frame = await codec.getNextFrame();
-      final bytes = await frame.image.toByteData(format: ui.ImageByteFormat.png);
+      final bytes = await frame.image.toByteData(
+        format: ui.ImageByteFormat.png,
+      );
       return BitmapDescriptor.fromBytes(bytes!.buffer.asUint8List());
     }
 
@@ -187,9 +199,12 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   BitmapDescriptor _getMarkerIconForType(String type) {
-    if (type.toLowerCase().contains('cafe') && _cafeIcon != null) return _cafeIcon!;
-    if (type.toLowerCase().contains('library') && _libraryIcon != null) return _libraryIcon!;
-    if (type.toLowerCase().contains('coworking') && _coworkingIcon != null) return _coworkingIcon!;
+    if (type.toLowerCase().contains('cafe') && _cafeIcon != null)
+      return _cafeIcon!;
+    if (type.toLowerCase().contains('library') && _libraryIcon != null)
+      return _libraryIcon!;
+    if (type.toLowerCase().contains('coworking') && _coworkingIcon != null)
+      return _coworkingIcon!;
     if (_otherIcon != null) return _otherIcon!;
     // Fallback to default marker if icons not loaded yet
     return BitmapDescriptor.defaultMarker;
@@ -197,7 +212,6 @@ class _MyHomePageState extends State<MyHomePage> {
 
   // Map styling is now handled via Google Cloud Map IDs
   // No need for manual style application
-
 
   // _updateMapStyle is no longer needed; style is set in onMapCreated
 
@@ -209,8 +223,6 @@ class _MyHomePageState extends State<MyHomePage> {
     super.dispose();
   }
 
-
-
   Future<void> _checkLocationPermission() async {
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
@@ -218,7 +230,9 @@ class _MyHomePageState extends State<MyHomePage> {
     }
     if (!mounted) return;
     setState(() {
-      _locationPermissionGranted = permission == LocationPermission.always || permission == LocationPermission.whileInUse;
+      _locationPermissionGranted =
+          permission == LocationPermission.always ||
+          permission == LocationPermission.whileInUse;
     });
     if (_locationPermissionGranted) {
       _centerOnCurrentLocation();
@@ -230,7 +244,9 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<void> _centerOnCurrentLocation() async {
     try {
       Position position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
       );
       if (!mounted) return;
       setState(() {
@@ -247,7 +263,6 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-
   Future<void> _fetchPlacesAt(LatLng center, double zoom) async {
     if (!mounted) return;
     setState(() {
@@ -260,14 +275,16 @@ class _MyHomePageState extends State<MyHomePage> {
     final types = [
       {'type': 'cafe'},
       {'type': 'library'},
-      {'type': 'coworking_space', 'keyword': 'coworking'}
+      {'type': 'coworking_space', 'keyword': 'coworking'},
     ];
     List<StudyPlace> allPlaces = [];
     try {
       for (var t in types) {
-        String url = 'https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=$location&radius=$radius&type=${t['type']}&key=$apiKey';
+        String url =
+            'https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=$location&radius=$radius&type=${t['type']}&key=$apiKey';
         if (t['type'] == 'coworking_space') {
-          url = 'https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=$location&radius=$radius&keyword=coworking&key=$apiKey';
+          url =
+              'https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=$location&radius=$radius&keyword=coworking&key=$apiKey';
         }
         final response = await http.get(Uri.parse(url));
         if (response.statusCode == 200) {
@@ -277,24 +294,32 @@ class _MyHomePageState extends State<MyHomePage> {
               final name = result['name'];
               final lat = result['geometry']['location']['lat'];
               final lng = result['geometry']['location']['lng'];
-              final type = t['type'] == 'coworking_space' ? 'Coworking' : (t['type'] as String).replaceFirst((t['type'] as String)[0], (t['type'] as String)[0].toUpperCase());
+              final type = t['type'] == 'coworking_space'
+                  ? 'Coworking'
+                  : (t['type'] as String).replaceFirst(
+                      (t['type'] as String)[0],
+                      (t['type'] as String)[0].toUpperCase(),
+                    );
               String? photoRef;
-              if (result['photos'] != null && (result['photos'] as List).isNotEmpty) {
+              if (result['photos'] != null &&
+                  (result['photos'] as List).isNotEmpty) {
                 photoRef = result['photos'][0]['photo_reference'];
               }
               final placeId = result['place_id'];
               final rating = result['rating']?.toDouble();
               final userRatingsTotal = result['user_ratings_total']?.toInt();
 
-              allPlaces.add(StudyPlace(
-                name, 
-                LatLng(lat, lng), 
-                type,
-                photoReference: photoRef,
-                placeId: placeId,
-                rating: rating,
-                userRatingsTotal: userRatingsTotal,
-              ));
+              allPlaces.add(
+                StudyPlace(
+                  name,
+                  LatLng(lat, lng),
+                  type,
+                  photoReference: photoRef,
+                  placeId: placeId,
+                  rating: rating,
+                  userRatingsTotal: userRatingsTotal,
+                ),
+              );
             }
           }
         } else {
@@ -312,6 +337,7 @@ class _MyHomePageState extends State<MyHomePage> {
           if (type.toLowerCase().contains('cafe')) return 2;
           return 3;
         }
+
         return rank(a.type).compareTo(rank(b.type));
       });
       if (!mounted) return;
@@ -340,14 +366,16 @@ class _MyHomePageState extends State<MyHomePage> {
     final types = [
       {'type': 'cafe'},
       {'type': 'library'},
-      {'type': 'coworking_space', 'keyword': 'coworking'}
+      {'type': 'coworking_space', 'keyword': 'coworking'},
     ];
     List<StudyPlace> allPlaces = [];
     try {
       for (var t in types) {
-        String url = 'https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=$location&radius=${radius.round()}&type=${t['type']}&key=$apiKey';
+        String url =
+            'https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=$location&radius=${radius.round()}&type=${t['type']}&key=$apiKey';
         if (t['type'] == 'coworking_space') {
-          url = 'https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=$location&radius=${radius.round()}&keyword=coworking&key=$apiKey';
+          url =
+              'https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=$location&radius=${radius.round()}&keyword=coworking&key=$apiKey';
         }
         final response = await http.get(Uri.parse(url));
         if (response.statusCode == 200) {
@@ -357,9 +385,15 @@ class _MyHomePageState extends State<MyHomePage> {
               final name = result['name'];
               final lat = result['geometry']['location']['lat'];
               final lng = result['geometry']['location']['lng'];
-              final type = t['type'] == 'coworking_space' ? 'Coworking' : (t['type'] as String).replaceFirst((t['type'] as String)[0], (t['type'] as String)[0].toUpperCase());
+              final type = t['type'] == 'coworking_space'
+                  ? 'Coworking'
+                  : (t['type'] as String).replaceFirst(
+                      (t['type'] as String)[0],
+                      (t['type'] as String)[0].toUpperCase(),
+                    );
               String? photoRef;
-              if (result['photos'] != null && (result['photos'] as List).isNotEmpty) {
+              if (result['photos'] != null &&
+                  (result['photos'] as List).isNotEmpty) {
                 photoRef = result['photos'][0]['photo_reference'];
               }
               final placeId = result['place_id'];
@@ -395,6 +429,7 @@ class _MyHomePageState extends State<MyHomePage> {
           if (type.toLowerCase().contains('cafe')) return 2;
           return 3;
         }
+
         return rank(a.type).compareTo(rank(b.type));
       });
       if (!mounted) return;
@@ -411,13 +446,12 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  void _openMenu(BuildContext context) {
-    if (!mounted) return;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => MenuPage(onSignOut: widget.onLogout),
-      ),
-    );
+  void _openMenu() {
+    _scaffoldKey.currentState?.openDrawer();
+  }
+
+  void _openProfile() {
+    _scaffoldKey.currentState?.openEndDrawer();
   }
 
   void _onSearchChanged(String query) {
@@ -446,7 +480,7 @@ class _MyHomePageState extends State<MyHomePage> {
     // 1. Search loaded pins first (No cost)
     final localResults = _places.where((place) {
       return place.name.toLowerCase().contains(trimmedQuery.toLowerCase()) ||
-             place.type.toLowerCase().contains(trimmedQuery.toLowerCase());
+          place.type.toLowerCase().contains(trimmedQuery.toLowerCase());
     }).toList();
 
     // 2. Search Google Places API for more results
@@ -465,7 +499,8 @@ class _MyHomePageState extends State<MyHomePage> {
     List<StudyPlace> apiResults = [];
     try {
       // Use Text Search for the query
-      String url = 'https://maps.googleapis.com/maps/api/place/textsearch/json?query=${Uri.encodeComponent(query)}&location=$location&radius=$radius&key=$apiKey';
+      String url =
+          'https://maps.googleapis.com/maps/api/place/textsearch/json?query=${Uri.encodeComponent(query)}&location=$location&radius=$radius&key=$apiKey';
       final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -475,34 +510,44 @@ class _MyHomePageState extends State<MyHomePage> {
             // or filter loosely to include anything that might be a study spot
             final placeTypes = (result['types'] as List).cast<String>();
             final name = result['name'].toLowerCase();
-            
-            bool isRelevant = placeTypes.any((t) => 
-              t.contains('cafe') || 
-              t.contains('library') || 
-              t.contains('coworking') ||
-              t.contains('university') ||
-              t.contains('school') ||
-              t.contains('book_store') ||
-              t.contains('establishment')
-            ) || name.contains('study') || name.contains('office') || name.contains('work');
+
+            bool isRelevant =
+                placeTypes.any(
+                  (t) =>
+                      t.contains('cafe') ||
+                      t.contains('library') ||
+                      t.contains('coworking') ||
+                      t.contains('university') ||
+                      t.contains('school') ||
+                      t.contains('book_store') ||
+                      t.contains('establishment'),
+                ) ||
+                name.contains('study') ||
+                name.contains('office') ||
+                name.contains('work');
 
             if (!isRelevant) continue;
 
             final lat = result['geometry']['location']['lat'];
             final lng = result['geometry']['location']['lng'];
-            
+
             // Refined type detection
             String type = 'Other';
             if (placeTypes.contains('library') || name.contains('library')) {
               type = 'Library';
-            } else if (placeTypes.any((t) => t.contains('coworking')) || name.contains('coworking') || name.contains('work')) {
+            } else if (placeTypes.any((t) => t.contains('coworking')) ||
+                name.contains('coworking') ||
+                name.contains('work')) {
               type = 'Coworking';
-            } else if (placeTypes.contains('cafe') || name.contains('cafe') || name.contains('coffee')) {
+            } else if (placeTypes.contains('cafe') ||
+                name.contains('cafe') ||
+                name.contains('coffee')) {
               type = 'Cafe';
             }
-            
+
             String? photoRef;
-            if (result['photos'] != null && (result['photos'] as List).isNotEmpty) {
+            if (result['photos'] != null &&
+                (result['photos'] as List).isNotEmpty) {
               photoRef = result['photos'][0]['photo_reference'];
             }
             final placeId = result['place_id'];
@@ -510,15 +555,17 @@ class _MyHomePageState extends State<MyHomePage> {
             final userRatingsTotal = result['user_ratings_total']?.toInt();
             // Avoid duplicates with loaded pins
             if (_places.any((p) => p.placeId == placeId)) continue;
-            apiResults.add(StudyPlace(
-              result['name'],
-              LatLng(lat, lng),
-              type,
-              photoReference: photoRef,
-              placeId: placeId,
-              rating: rating,
-              userRatingsTotal: userRatingsTotal,
-            ));
+            apiResults.add(
+              StudyPlace(
+                result['name'],
+                LatLng(lat, lng),
+                type,
+                photoReference: photoRef,
+                placeId: placeId,
+                rating: rating,
+                userRatingsTotal: userRatingsTotal,
+              ),
+            );
           }
         }
       }
@@ -542,9 +589,9 @@ class _MyHomePageState extends State<MyHomePage> {
       onError: (error) {
         if (!mounted) return;
         setState(() => _isListening = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: {error.errorMsg}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: {error.errorMsg}')));
       },
     );
 
@@ -592,10 +639,9 @@ class _MyHomePageState extends State<MyHomePage> {
     double lon2 = bounds.southwest.longitude * (pi / 180.0);
     double dLat = lat2 - lat1;
     double dLon = lon2 - lon1;
-    double a = 
-      (sin(dLat / 2) * sin(dLat / 2)) +
-      cos(lat1) * cos(lat2) *
-      (sin(dLon / 2) * sin(dLon / 2));
+    double a =
+        (sin(dLat / 2) * sin(dLat / 2)) +
+        cos(lat1) * cos(lat2) * (sin(dLon / 2) * sin(dLon / 2));
     double c = 2 * atan2(sqrt(a), sqrt(1 - a));
     double distance = earthRadius * c;
     return distance / 2; // half diagonal as radius
@@ -604,15 +650,25 @@ class _MyHomePageState extends State<MyHomePage> {
   bool _isLatLngInBounds(LatLng point, LatLngBounds bounds) {
     final lat = point.latitude;
     final lng = point.longitude;
-    return lat >= bounds.southwest.latitude && lat <= bounds.northeast.latitude &&
-           lng >= bounds.southwest.longitude && lng <= bounds.northeast.longitude;
+    return lat >= bounds.southwest.latitude &&
+        lat <= bounds.northeast.latitude &&
+        lng >= bounds.southwest.longitude &&
+        lng <= bounds.northeast.longitude;
   }
-
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
+      key: _scaffoldKey,
+      drawer: Drawer(
+        width: MediaQuery.of(context).size.width * 0.85,
+        child: MenuPage(onSignOut: widget.onLogout),
+      ),
+      endDrawer: Drawer(
+        width: MediaQuery.of(context).size.width * 0.85,
+        child: ProfilePage(onSignOut: widget.onLogout),
+      ),
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
         children: [
@@ -620,48 +676,117 @@ class _MyHomePageState extends State<MyHomePage> {
           Positioned.fill(
             child: Builder(
               builder: (context) {
-                final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+                final isDarkMode =
+                    Theme.of(context).brightness == Brightness.dark;
                 return AnimatedSwitcher(
                   duration: const Duration(milliseconds: 400),
                   switchInCurve: Curves.easeIn,
                   switchOutCurve: Curves.easeOut,
                   child: GoogleMap(
-                    key: ValueKey(isDarkMode), // Key ensures AnimatedSwitcher detects the change
+                    key: ValueKey(
+                      isDarkMode,
+                    ), // Key ensures AnimatedSwitcher detects the change
                     cloudMapId: isDarkMode ? '2f87b85e986833829e30b116' : null,
                     initialCameraPosition: CameraPosition(
                       target: _currentCenter,
                       zoom: _currentZoom,
                     ),
-              myLocationEnabled: true,
-              myLocationButtonEnabled: false,
-              zoomControlsEnabled: false,
-              markers: _places
-                  .map((place) => Marker(
-                        markerId: MarkerId(place.name),
-                        position: place.location,
-                        onTap: () {
-                          setState(() {
-                            _selectedPlace = place;
-                          });
-                          _fetchAgoraReviewStats(place.placeId ?? '');
-                          _mapController?.animateCamera(
-                            CameraUpdate.newLatLng(place.location),
-                          );
-                        },
-                        icon: _getMarkerIconForType(place.type),
-                      ))
-                  .toSet(),
-              onMapCreated: (controller) {
-                _mapController = controller;
-              },
-              onTap: (_) {
-                setState(() {
-                  _selectedPlace = null;
-                });
-              },
+                    myLocationEnabled: true,
+                    myLocationButtonEnabled: false,
+                    zoomControlsEnabled: false,
+                    markers: _places
+                        .map(
+                          (place) => Marker(
+                            markerId: MarkerId(place.name),
+                            position: place.location,
+                            onTap: () {
+                              setState(() {
+                                _selectedPlace = place;
+                              });
+                              _fetchAgoraReviewStats(place.placeId ?? '');
+                              _mapController?.animateCamera(
+                                CameraUpdate.newLatLng(place.location),
+                              );
+                            },
+                            icon: _getMarkerIconForType(place.type),
+                          ),
+                        )
+                        .toSet(),
+                    onMapCreated: (controller) {
+                      _mapController = controller;
+                    },
+                    onTap: (_) {
+                      setState(() {
+                        _selectedPlace = null;
+                      });
+                    },
                   ),
                 );
               },
+            ),
+          ),
+
+          // Recommendations Button (right side, circular, visually prominent)
+          Positioned(
+            right: 24,
+            // Vertically between middle and current location button
+            bottom: 110,
+            child: Material(
+              color: Colors.transparent,
+              elevation: 6,
+              shape: const CircleBorder(),
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const RecommendationsPage(),
+                    ),
+                  );
+                },
+                child: Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: colorScheme.secondary,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: colorScheme.shadow.withOpacity(0.18),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween<double>(begin: 0, end: 2 * 3.14159),
+                    duration: const Duration(seconds: 4),
+                    builder: (context, value, child) {
+                      return Transform.rotate(
+                        angle: value,
+                        child: child,
+                      );
+                    },
+                    onEnd: () {}, // Handled by repetition logic if needed, but we'll use a simpler pulse next
+                    child: TweenAnimationBuilder<double>(
+                      tween: Tween<double>(begin: 1.0, end: 1.2),
+                      duration: const Duration(milliseconds: 1000),
+                      curve: Curves.easeInOut,
+                      builder: (context, scale, child) {
+                        return Transform.scale(
+                          scale: 1.0 + (0.1 * sin(DateTime.now().millisecondsSinceEpoch / 500)),
+                          child: child,
+                        );
+                      },
+                      child: const Icon(
+                        Icons.auto_awesome,
+                        color: Colors.white,
+                        size: 30,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
           // Recent Reviews Button (bottom left)
@@ -710,7 +835,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 children: [
                   IconButton(
                     icon: Icon(Icons.menu, color: colorScheme.onSurface),
-                    onPressed: () => _openMenu(context),
+                    onPressed: () => _openMenu(),
                   ),
                   Row(
                     mainAxisSize: MainAxisSize.min,
@@ -739,16 +864,19 @@ class _MyHomePageState extends State<MyHomePage> {
                       ),
                     ],
                   ),
+                  // ...existing code...
                   GestureDetector(
                     onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(builder: (context) => ProfilePage(onSignOut: widget.onLogout)),
-                      );
+                      _openProfile();
                     },
                     child: CircleAvatar(
                       radius: 16,
                       backgroundColor: colorScheme.primaryContainer,
-                      child: Icon(Icons.person, size: 20, color: colorScheme.primary),
+                      child: Icon(
+                        Icons.person,
+                        size: 20,
+                        color: colorScheme.primary,
+                      ),
                     ),
                   ),
                 ],
@@ -785,8 +913,11 @@ class _MyHomePageState extends State<MyHomePage> {
                     ? Row(
                         children: [
                           IconButton(
-                            icon: Icon(Icons.menu, color: colorScheme.onSurfaceVariant),
-                            onPressed: () => _openMenu(context),
+                            icon: Icon(
+                              Icons.menu,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                            onPressed: () => _openMenu(),
                           ),
                           const SizedBox(width: 4),
                           Expanded(
@@ -798,7 +929,8 @@ class _MyHomePageState extends State<MyHomePage> {
                                 hintText: 'Search for a place to study',
                                 border: InputBorder.none,
                                 hintStyle: TextStyle(
-                                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
+                                  color: colorScheme.onSurfaceVariant
+                                      .withValues(alpha: 0.8),
                                   fontSize: 16,
                                   fontFamily: 'Roboto',
                                 ),
@@ -812,7 +944,10 @@ class _MyHomePageState extends State<MyHomePage> {
                           ),
                           if (_searchController.text.isNotEmpty)
                             IconButton(
-                              icon: Icon(Icons.clear, color: colorScheme.onSurfaceVariant),
+                              icon: Icon(
+                                Icons.clear,
+                                color: colorScheme.onSurfaceVariant,
+                              ),
                               onPressed: () {
                                 _searchController.clear();
                                 _performSearch('');
@@ -821,24 +956,33 @@ class _MyHomePageState extends State<MyHomePage> {
                           IconButton(
                             icon: Icon(
                               _isListening ? Icons.mic : Icons.mic_none,
-                              color: _isListening ? Colors.red : colorScheme.onSurfaceVariant,
+                              color: _isListening
+                                  ? Colors.red
+                                  : colorScheme.onSurfaceVariant,
                             ),
-                            onPressed: _isListening ? _stopListening : _startListening,
+                            onPressed: _isListening
+                                ? _stopListening
+                                : _startListening,
                           ),
                         ],
                       )
                     : Row(
                         children: [
                           IconButton(
-                            icon: Icon(Icons.menu, color: colorScheme.onSurfaceVariant),
-                            onPressed: () => _openMenu(context),
+                            icon: Icon(
+                              Icons.menu,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                            onPressed: () => _openMenu(),
                           ),
                           const SizedBox(width: 4),
                           Expanded(
                             child: Text(
                               'Search for a place to study',
                               style: TextStyle(
-                                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
+                                color: colorScheme.onSurfaceVariant.withValues(
+                                  alpha: 0.8,
+                                ),
                                 fontSize: 16,
                                 fontFamily: 'Roboto',
                               ),
@@ -874,8 +1018,14 @@ class _MyHomePageState extends State<MyHomePage> {
                 onTap: () async {
                   if (_mapController != null) {
                     final bounds = await _mapController!.getVisibleRegion();
-                    final centerLat = (bounds.northeast.latitude + bounds.southwest.latitude) / 2;
-                    final centerLng = (bounds.northeast.longitude + bounds.southwest.longitude) / 2;
+                    final centerLat =
+                        (bounds.northeast.latitude +
+                            bounds.southwest.latitude) /
+                        2;
+                    final centerLng =
+                        (bounds.northeast.longitude +
+                            bounds.southwest.longitude) /
+                        2;
                     final center = LatLng(centerLat, centerLng);
                     setState(() {
                       _currentCenter = center;
@@ -886,7 +1036,10 @@ class _MyHomePageState extends State<MyHomePage> {
                   }
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: colorScheme.surface,
                     borderRadius: BorderRadius.circular(20),
@@ -897,7 +1050,10 @@ class _MyHomePageState extends State<MyHomePage> {
                         offset: const Offset(0, 2),
                       ),
                     ],
-                    border: Border.all(color: colorScheme.outlineVariant, width: 0.5),
+                    border: Border.all(
+                      color: colorScheme.outlineVariant,
+                      width: 0.5,
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -920,112 +1076,179 @@ class _MyHomePageState extends State<MyHomePage> {
           ),
 
           // 6. Place Card Overlay
-          if (_selectedPlace != null)
-            Positioned(
-              bottom: 16,
-              left: 16,
-              right: 16,
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 340),
-                  child: GestureDetector(
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => PlaceDetailsPage(place: _selectedPlace!),
-                        ),
-                      );
-                    },
-                    child: Card(
-                      elevation: 8,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(color: colorScheme.outlineVariant, width: 1),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Stack(
-                            children: [
-                              if (_getPhotoUrl(_selectedPlace!.photoReference) != null)
-                                ClipRRect(
-                                  borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                                  child: Image.network(
-                                    _getPhotoUrl(_selectedPlace!.photoReference)!,
-                                    height: 160,
-                                    width: double.infinity,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) => Container(
-                                      height: 160,
-                                      color: colorScheme.surfaceContainerHighest,
-                                      child: const Icon(Icons.image_not_supported, size: 40),
-                                    ),
-                                  ),
-                                )
-                              else
-                                Container(
-                                  height: 160,
-                                  decoration: BoxDecoration(
-                                    color: colorScheme.surfaceContainerHighest,
-                                    borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                                  ),
-                                  child: Center(child: Icon(Icons.place, color: colorScheme.primary, size: 50)),
-                                ),
-                              Positioned(
-                                top: 8,
-                                right: 8,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
+          Positioned(
+            bottom: 16,
+            left: 16,
+            right: 16,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              transitionBuilder: (Widget child, Animation<double> animation) {
+                return SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, 1),
+                    end: Offset.zero,
+                  ).animate(
+                    CurvedAnimation(
+                      parent: animation,
+                      curve: Curves.easeOutCubic,
+                    ),
+                  ),
+                  child: FadeTransition(
+                    opacity: animation,
+                    child: child,
+                  ),
+                );
+              },
+              child: _selectedPlace == null
+                  ? const SizedBox.shrink(key: ValueKey('empty'))
+                  : Center(
+                      key: ValueKey(_selectedPlace!.placeId),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 340),
+                        child: GestureDetector(
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    PlaceDetailsPage(place: _selectedPlace!),
+                              ),
+                            );
+                          },
+                          child: Card(
+                            elevation: 8,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: BorderSide(
+                                color: colorScheme.outlineVariant,
+                                width: 1,
+                              ),
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Stack(
                                   children: [
-                                    // Favorite button
-                                    GestureDetector(
-                                      onTap: () async {
-                                        final rootContext = context;
-                                        final wasFavorite = _favoritesManager.isFavorite(_selectedPlace!);
-                                        await _favoritesManager.toggleFavorite(_selectedPlace!);
-                                        if (!mounted) return;
-                                        setState(() {});
-                                        if (!rootContext.mounted) return;
-                                        ScaffoldMessenger.of(rootContext).showSnackBar(
+                                    if (_getPhotoUrl(
+                                          _selectedPlace!.photoReference,
+                                        ) !=
+                                        null)
+                                      ClipRRect(
+                                        borderRadius: const BorderRadius.vertical(
+                                          top: Radius.circular(12),
+                                        ),
+                                        child: Image.network(
+                                          _getPhotoUrl(
+                                            _selectedPlace!.photoReference,
+                                          )!,
+                                          height: 160,
+                                          width: double.infinity,
+                                          fit: BoxFit.cover,
+                                          errorBuilder:
+                                              (context, error, stackTrace) =>
+                                                  Container(
+                                                    height: 160,
+                                                    color: colorScheme
+                                                        .surfaceContainerHighest,
+                                                    child: const Icon(
+                                                      Icons.image_not_supported,
+                                                      size: 40,
+                                                    ),
+                                                  ),
+                                        ),
+                                      )
+                                    else
+                                      Container(
+                                        height: 160,
+                                        decoration: BoxDecoration(
+                                          color: colorScheme.surfaceContainerHighest,
+                                          borderRadius: const BorderRadius.vertical(
+                                            top: Radius.circular(12),
+                                          ),
+                                        ),
+                                        child: Center(
+                                          child: Icon(
+                                            Icons.place,
+                                            color: colorScheme.primary,
+                                            size: 50,
+                                          ),
+                                        ),
+                                      ),
+                                    Positioned(
+                                      top: 8,
+                                      right: 8,
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          // Favorite button
+                                          GestureDetector(
+                                            onTap: () async {
+                                              final rootContext = context;
+                                              final wasFavorite = _favoritesManager
+                                                  .isFavorite(_selectedPlace!);
+                                              await _favoritesManager.toggleFavorite(
+                                                _selectedPlace!,
+                                              );
+                                              if (!mounted) return;
+                                              setState(() {});
+                                              if (!rootContext.mounted) return;
+                                              ScaffoldMessenger.of(
+                                                rootContext,
+                                              ).showSnackBar(
                                           SnackBar(
                                             content: Text(
-                                              wasFavorite 
-                                                ? '${_selectedPlace!.name} removed from favorites' 
-                                                : '${_selectedPlace!.name} added to favorites'
+                                              wasFavorite
+                                                  ? '${_selectedPlace!.name} removed from favorites'
+                                                  : '${_selectedPlace!.name} added to favorites',
                                             ),
-                                            duration: const Duration(seconds: 2),
+                                            duration: const Duration(
+                                              seconds: 2,
+                                            ),
                                           ),
                                         );
                                       },
                                       child: Container(
                                         padding: const EdgeInsets.all(4),
                                         decoration: BoxDecoration(
-                                          color: colorScheme.surface.withValues(alpha: 0.8),
+                                          color: colorScheme.surface.withValues(
+                                            alpha: 0.8,
+                                          ),
                                           shape: BoxShape.circle,
                                         ),
                                         child: Icon(
-                                          _favoritesManager.isFavorite(_selectedPlace!)
-                                            ? Icons.favorite
-                                            : Icons.favorite_border,
+                                          _favoritesManager.isFavorite(
+                                                _selectedPlace!,
+                                              )
+                                              ? Icons.favorite
+                                              : Icons.favorite_border,
                                           size: 18,
-                                          color: _favoritesManager.isFavorite(_selectedPlace!)
-                                            ? Colors.red
-                                            : colorScheme.onSurface,
+                                          color:
+                                              _favoritesManager.isFavorite(
+                                                _selectedPlace!,
+                                              )
+                                              ? Colors.red
+                                              : colorScheme.onSurface,
                                         ),
                                       ),
                                     ),
                                     const SizedBox(width: 8),
                                     // Close button
                                     GestureDetector(
-                                      onTap: () => setState(() => _selectedPlace = null),
+                                      onTap: () =>
+                                          setState(() => _selectedPlace = null),
                                       child: Container(
                                         padding: const EdgeInsets.all(4),
                                         decoration: BoxDecoration(
-                                          color: colorScheme.surface.withValues(alpha: 0.8),
+                                          color: colorScheme.surface.withValues(
+                                            alpha: 0.8,
+                                          ),
                                           shape: BoxShape.circle,
                                         ),
-                                        child: Icon(Icons.close, size: 18, color: colorScheme.onSurface),
+                                        child: Icon(
+                                          Icons.close,
+                                          size: 18,
+                                          color: colorScheme.onSurface,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -1041,13 +1264,19 @@ class _MyHomePageState extends State<MyHomePage> {
                                 Row(
                                   children: [
                                     Icon(
-                                      _selectedPlace!.type.toLowerCase().contains('cafe')
+                                      _selectedPlace!.type
+                                              .toLowerCase()
+                                              .contains('cafe')
                                           ? Icons.local_cafe
-                                          : _selectedPlace!.type.toLowerCase().contains('library')
-                                              ? Icons.menu_book
-                                              : _selectedPlace!.type.toLowerCase().contains('coworking')
-                                                  ? Icons.work
-                                                  : Icons.location_on,
+                                          : _selectedPlace!.type
+                                                .toLowerCase()
+                                                .contains('library')
+                                          ? Icons.menu_book
+                                          : _selectedPlace!.type
+                                                .toLowerCase()
+                                                .contains('coworking')
+                                          ? Icons.work
+                                          : Icons.location_on,
                                       color: colorScheme.primary,
                                       size: 20,
                                     ),
@@ -1070,7 +1299,11 @@ class _MyHomePageState extends State<MyHomePage> {
                                 // Google reviews row
                                 Row(
                                   children: [
-                                    Icon(Icons.star, size: 16, color: colorScheme.onSurface),
+                                    Icon(
+                                      Icons.star,
+                                      size: 16,
+                                      color: colorScheme.onSurface,
+                                    ),
                                     const SizedBox(width: 4),
                                     Text(
                                       '${_selectedPlace!.rating != null ? _selectedPlace!.rating!.toStringAsFixed(1) : "N/A"} (Google, ${_selectedPlace!.userRatingsTotal ?? 0} reviews)',
@@ -1093,24 +1326,50 @@ class _MyHomePageState extends State<MyHomePage> {
                                           SizedBox(
                                             width: 16,
                                             height: 16,
-                                            child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.primary),
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: colorScheme.primary,
+                                            ),
                                           ),
                                           const SizedBox(width: 8),
-                                          Text('Loading Agora reviews...', style: TextStyle(fontSize: 13, color: colorScheme.onSurfaceVariant)),
+                                          Text(
+                                            'Loading Agora reviews...',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color:
+                                                  colorScheme.onSurfaceVariant,
+                                            ),
+                                          ),
                                         ],
                                       );
-                                    } else if (_agoraReviewCount == null || _agoraReviewCount == 0) {
+                                    } else if (_agoraReviewCount == null ||
+                                        _agoraReviewCount == 0) {
                                       return Row(
                                         children: [
-                                          Icon(Icons.star_border, size: 16, color: colorScheme.onSurfaceVariant),
+                                          Icon(
+                                            Icons.star_border,
+                                            size: 16,
+                                            color: colorScheme.onSurfaceVariant,
+                                          ),
                                           const SizedBox(width: 4),
-                                          Text('No Agora reviews yet', style: TextStyle(fontSize: 13, color: colorScheme.onSurfaceVariant)),
+                                          Text(
+                                            'No Agora reviews yet',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color:
+                                                  colorScheme.onSurfaceVariant,
+                                            ),
+                                          ),
                                         ],
                                       );
                                     } else {
                                       return Row(
                                         children: [
-                                          Icon(Icons.star, size: 16, color: colorScheme.primary),
+                                          Icon(
+                                            Icons.star,
+                                            size: 16,
+                                            color: colorScheme.primary,
+                                          ),
                                           const SizedBox(width: 4),
                                           Text(
                                             '${_agoraAvgRating != null ? _agoraAvgRating!.toStringAsFixed(1) : "N/A"} (Agora, $_agoraReviewCount review${_agoraReviewCount == 1 ? '' : 's'})',
@@ -1147,6 +1406,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 ),
               ),
             ),
+          ),
 
           // 7. Search Results Overlay
           if (_isSearching && _searchResults.isNotEmpty)
@@ -1173,7 +1433,9 @@ class _MyHomePageState extends State<MyHomePage> {
                   itemBuilder: (context, index) {
                     final place = _searchResults[index];
                     return FutureBuilder<double?>(
-                      future: DatabaseService().getPlaceAverageRating(place.placeId ?? ''),
+                      future: DatabaseService().getPlaceAverageRating(
+                        place.placeId ?? '',
+                      ),
                       builder: (context, snapshot) {
                         final agoraRating = snapshot.data;
                         return ListTile(
@@ -1181,8 +1443,8 @@ class _MyHomePageState extends State<MyHomePage> {
                             place.type.toLowerCase().contains('cafe')
                                 ? Icons.local_cafe
                                 : place.type.toLowerCase().contains('library')
-                                    ? Icons.menu_book
-                                    : Icons.work,
+                                ? Icons.menu_book
+                                : Icons.work,
                             color: colorScheme.primary,
                           ),
                           title: Text(
@@ -1204,7 +1466,11 @@ class _MyHomePageState extends State<MyHomePage> {
                               ? Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const Icon(Icons.star, color: Color(0xFFFBBF24), size: 16),
+                                    const Icon(
+                                      Icons.star,
+                                      color: Color(0xFFFBBF24),
+                                      size: 16,
+                                    ),
                                     const SizedBox(width: 4),
                                     Text(
                                       agoraRating.toStringAsFixed(1),
@@ -1215,22 +1481,31 @@ class _MyHomePageState extends State<MyHomePage> {
                                     ),
                                   ],
                                 )
-                              : const Text('—', style: TextStyle(color: Colors.grey)),
+                              : const Text(
+                                  '—',
+                                  style: TextStyle(color: Colors.grey),
+                                ),
                           onTap: () {
                             // If not already a pin, add to pins and select
                             setState(() {
-                              if (!_places.any((p) => p.placeId == place.placeId)) {
+                              if (!_places.any(
+                                (p) => p.placeId == place.placeId,
+                              )) {
                                 _places.add(place);
                                 _selectedPlace = place;
                               } else {
-                                _selectedPlace = _places.firstWhere((p) => p.placeId == place.placeId);
+                                _selectedPlace = _places.firstWhere(
+                                  (p) => p.placeId == place.placeId,
+                                );
                               }
                               // Hide search overlay
                               _isSearching = false;
                               _searchResults = [];
                             });
                             // Center map on the place
-                            _mapController?.animateCamera(CameraUpdate.newLatLng(place.location));
+                            _mapController?.animateCamera(
+                              CameraUpdate.newLatLng(place.location),
+                            );
                             // Show popup card (handled by _selectedPlace)
                           },
                         );

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,14 +6,18 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:noise_meter/noise_meter.dart';
 
 import '../models/review.dart';
 import '../models/study_place.dart';
 import '../services/auth_service.dart';
 import '../services/database_service.dart';
 import '../services/noise_service.dart';
-import '../services/storage_service.dart';
+import '../services/points_service.dart';
+import '../services/preferences_service.dart';
+
+import '../services/image_service.dart';
+import '../services/user_display_name_cache.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 
 class PlaceDetailsPage extends StatefulWidget {
   final StudyPlace place;
@@ -27,17 +30,31 @@ class PlaceDetailsPage extends StatefulWidget {
 
 
 class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
+  final ScrollController _scrollController = ScrollController();
 
     // For editing review
     int _editRating = 0;
     String _editOutlets = 'None';
     final TextEditingController _editReviewController = TextEditingController();
+    final TextEditingController _editPriceController = TextEditingController();
+    int _editWifiQuality = 0;
+    int _editComfortLevel = 0;
+    int _editAestheticRating = 0;
+    double? _editNoiseLevel;
+    List<String> _editPhotoBase64List = [];
 
 
     void _showEditReviewDialog(Review review) {
       _editRating = review.rating;
       _editOutlets = review.outlets;
       _editReviewController.text = review.reviewText;
+      _editPriceController.text = review.averagePrice ?? '';
+      _editWifiQuality = review.wifiQuality ?? 0;
+      _editComfortLevel = review.comfortLevel ?? 0;
+      _editAestheticRating = review.aestheticRating ?? 0;
+      _editNoiseLevel = review.noiseLevel;
+      _editPhotoBase64List = List.from(review.userPhotos ?? []);
+      
       if (!mounted) return;
       showDialog(
         context: context,
@@ -113,6 +130,43 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                           hintText: 'Edit your review',
                         ),
                       ),
+                      const SizedBox(height: 16),
+                      const Divider(),
+                      const SizedBox(height: 8),
+                      const Text('Optional Details', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 12),
+                      _buildEditSlider('Wi-Fi Quality', Icons.wifi, _editWifiQuality, (val) {
+                        setDialogState(() => _editWifiQuality = val.round());
+                      }, colorScheme),
+                      const SizedBox(height: 8),
+                      // Removed: Outlets star slider (now using None/Few/A lot system)
+                      const SizedBox(height: 8),
+                      _buildEditSlider('Comfort', Icons.chair, _editComfortLevel, (val) {
+                        setDialogState(() => _editComfortLevel = val.round());
+                      }, colorScheme),
+                      const SizedBox(height: 8),
+                      _buildEditSlider('Aesthetic', Icons.palette, _editAestheticRating, (val) {
+                        setDialogState(() => _editAestheticRating = val.round());
+                      }, colorScheme),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _editPriceController,
+                        decoration: const InputDecoration(
+                          labelText: 'Average Price',
+                          hintText: 'e.g., €5',
+                          prefixIcon: Icon(Icons.euro),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      if (_editNoiseLevel != null)
+                        Text(
+                          'Noise Level: ${_editNoiseLevel!.toStringAsFixed(1)} dB (${NoiseService.getNoiseCategory(_editNoiseLevel!)})',
+                          style: TextStyle(fontSize: 14, color: colorScheme.onSurfaceVariant),
+                        ),
+                      if (_editPhotoBase64List.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        Text('Photos: ${_editPhotoBase64List.length}', style: const TextStyle(fontSize: 14)),
+                      ],
                     ],
                   ),
                 ),
@@ -129,12 +183,24 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                           rating: _editRating,
                           outlets: _editOutlets,
                           reviewText: _editReviewController.text.trim(),
+                          wifiQuality: _editWifiQuality > 0 ? _editWifiQuality : null,
+                          comfortLevel: _editComfortLevel > 0 ? _editComfortLevel : null,
+                          aestheticRating: _editAestheticRating > 0 ? _editAestheticRating : null,
+                          averagePrice: _editPriceController.text.trim().isNotEmpty ? _editPriceController.text.trim() : null,
+                          noiseLevel: _editNoiseLevel,
+                          userPhotos: _editPhotoBase64List.isNotEmpty ? _editPhotoBase64List : null,
                         );
                         if (!mounted || !context.mounted) return;
                         Navigator.of(context).pop();
                         // Refresh user review
                         _checkIfUserReviewed();
-                        setState(() {});
+                        setState(() {
+                          // Refresh averages and photos since data has changed
+                          if (widget.place.placeId != null) {
+                            _photosFuture = _databaseService.getPlacePhotos(widget.place.placeId!);
+                            _attributeAveragesFuture = _databaseService.getPlaceAttributeAverages(widget.place.placeId!);
+                          }
+                        });
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('Review updated!'), backgroundColor: Colors.green),
                         );
@@ -152,6 +218,41 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
             },
           );
         },
+      );
+    }
+
+    Widget _buildEditSlider(String label, IconData icon, int value, Function(double) onChanged, ColorScheme colorScheme) {
+      return Row(
+        children: [
+          Icon(icon, size: 20, color: colorScheme.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: const TextStyle(fontSize: 14)),
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onVerticalDragStart: (_) {},
+                        child: Slider(
+                          value: value.toDouble(),
+                          min: 0,
+                          max: 5,
+                          divisions: 5,
+                          label: value == 0 ? 'Not set' : '$value',
+                          onChanged: onChanged,
+                        ),
+                      ),
+                    ),
+                    Text('$value', style: const TextStyle(fontSize: 14)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       );
     }
 
@@ -196,22 +297,29 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
       );
     }
   final TextEditingController _reviewController = TextEditingController();
+  final TextEditingController _priceController = TextEditingController();
   final DatabaseService _databaseService = DatabaseService();
   final AuthService _authService = AuthService();
   final NoiseService _noiseService = NoiseService();
   final ImagePicker _imagePicker = ImagePicker();
-  final StorageService _storageService = StorageService();
+  final PointsService _pointsService = PointsService();
+  final PreferencesService _preferencesService = PreferencesService();
+  
   int _selectedRating = 0;
   String _selectedOutlets = 'None'; // None, Few, A lot
   bool _submittingReview = false;
+  
+  // New enhanced review attributes
+  int _wifiQuality = 0; // 0-5
+  int _comfortLevel = 0; // 0-5
+  int _aestheticRating = 0; // 0-5
+  double? _measuredNoiseLevel;
+  List<String> _photoBase64List = []; // Base64 encoded photos
+  bool _isPickingPhoto = false;
 
   bool _isMeasuringNoise = false;
   double? _lastNoiseDb;
   String? _noiseError;
-
-  XFile? _capturedPhoto;
-  bool _pickingPhoto = false;
-  String? _photoError;
 
   bool _checkingIn = false;
   bool _checkedIn = false;
@@ -221,11 +329,35 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
   bool _hasReviewed = false;
   Review? _userReview;
 
+  late Future<List<String>> _photosFuture;
+  late Future<Map<String, dynamic>> _attributeAveragesFuture;
+  late Stream<List<Review>> _reviewsStream;
+
   @override
   void initState() {
     super.initState();
+    _photosFuture = widget.place.placeId != null 
+        ? _databaseService.getPlacePhotos(widget.place.placeId!) 
+        : Future.value([]);
+    _attributeAveragesFuture = widget.place.placeId != null 
+        ? _databaseService.getPlaceAttributeAverages(widget.place.placeId!) 
+        : Future.value({});
+    _reviewsStream = _databaseService.getPlaceReviews(widget.place.placeId ?? '');
     _checkIfUserReviewed();
     _checkIfCheckedIn();
+    _trackPlaceView();
+  }
+
+  Future<void> _trackPlaceView() async {
+    final user = _authService.currentUser;
+    if (user == null || widget.place.placeId == null) return;
+    
+    await _preferencesService.trackPlaceView(
+      userId: user.uid,
+      placeId: widget.place.placeId!,
+      placeName: widget.place.name,
+      placeType: widget.place.type,
+    );
   }
 
   Future<void> _checkIfUserReviewed() async {
@@ -263,8 +395,10 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
 
   @override
   void dispose() {
+    _scrollController.dispose();
     _reviewController.dispose();
     _editReviewController.dispose();
+    _priceController.dispose();
     _noiseService.dispose();
     super.dispose();
   }
@@ -284,201 +418,6 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
     if (t.contains('library')) return Icons.menu_book;
     if (t.contains('coworking')) return Icons.work;
     return Icons.location_on;
-  }
-
-  Future<void> _measureNoise() async {
-    final micStatus = await Permission.microphone.request();
-    if (!micStatus.isGranted) {
-      if (!mounted) return;
-      setState(() {
-        _noiseError = 'Microphone permission is required.';
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_noiseError!)),
-      );
-      return;
-    }
-
-    setState(() {
-      _noiseError = null;
-    });
-
-    double? liveDb;
-    int secondsLeft = 10;
-    bool finished = false;
-    List<double> readings = [];
-    StreamSubscription<NoiseReading>? sub;
-    Timer? timer;
-
-    if (!mounted || !context.mounted) return;
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            // Start measurement on first build
-            if (sub == null) {
-              sub = _noiseService.noiseStream.listen(
-                (reading) {
-                  readings.add(reading.meanDecibel);
-                  setDialogState(() {
-                    liveDb = reading.meanDecibel;
-                  });
-                },
-                onError: (Object error, StackTrace stackTrace) {
-                  if (!finished) {
-                    finished = true;
-                    if (dialogContext.mounted) {
-                      Navigator.of(dialogContext).pop();
-                    }
-                    if (mounted) {
-                      setState(() {
-                        _noiseError = 'Noise measurement failed.';
-                      });
-                    }
-                  }
-                },
-                cancelOnError: true,
-              );
-              timer = Timer.periodic(const Duration(seconds: 1), (t) {
-                if (secondsLeft > 1) {
-                  setDialogState(() {
-                    secondsLeft--;
-                  });
-                } else {
-                  t.cancel();
-                  finished = true;
-                  sub?.cancel();
-                  sub = null;
-                  if (dialogContext.mounted) {
-                    Navigator.of(dialogContext).pop();
-                  }
-                }
-              });
-            }
-            final colorScheme = Theme.of(context).colorScheme;
-            return AlertDialog(
-              title: const Text('Measuring Noise'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('Ambient sound level'),
-                  const SizedBox(height: 12),
-                  // Animated decibel value
-                  Text(
-                    liveDb != null ? '${liveDb!.toStringAsFixed(1)} dB' : '-- dB',
-                    style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: colorScheme.primary),
-                  ),
-                  const SizedBox(height: 8),
-                  LinearProgressIndicator(
-                    value: liveDb != null ? (liveDb!.clamp(30, 100) - 30) / 70 : 0,
-                    minHeight: 8,
-                    backgroundColor: colorScheme.surfaceContainerHighest,
-                    color: colorScheme.primary,
-                  ),
-                  const SizedBox(height: 16),
-                  Text('Time remaining: $secondsLeft s', style: TextStyle(fontSize: 16)),
-                  const SizedBox(height: 8),
-                  Text('Please stay quiet during measurement.', style: TextStyle(fontSize: 13, color: colorScheme.onSurfaceVariant)),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    finished = true;
-                    timer?.cancel();
-                    sub?.cancel();
-                    sub = null;
-                    Navigator.of(dialogContext).pop();
-                  },
-                  child: const Text('Cancel'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-    timer?.cancel();
-    await sub?.cancel();
-    sub = null;
-    double? averageNoise;
-    if (readings.isNotEmpty) {
-      averageNoise = readings.reduce((a, b) => a + b) / readings.length;
-    }
-    if (!mounted) return;
-    setState(() {
-      _lastNoiseDb = averageNoise;
-      _isMeasuringNoise = false;
-    });
-    if (averageNoise != null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Average noise level: ${averageNoise.toStringAsFixed(1)} dB')),
-        );
-      }
-    } else if (_noiseError != null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_noiseError!)),
-        );
-      }
-    }
-  }
-
-  Future<void> _capturePlacePhoto() async {
-    // Ask camera permission before launching picker
-    final camStatus = await Permission.camera.request();
-    if (!camStatus.isGranted) {
-      if (!mounted) return;
-      setState(() {
-        _photoError = 'Camera permission is required.';
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enable camera permission to take a photo.')),
-      );
-      return;
-    }
-
-    setState(() {
-      _pickingPhoto = true;
-      _photoError = null;
-    });
-
-    try {
-      final picked = await _imagePicker.pickImage(
-        source: ImageSource.camera,
-        maxWidth: 1600,
-        maxHeight: 1600,
-        imageQuality: 85,
-      );
-
-      if (!mounted) return;
-      setState(() {
-        _pickingPhoto = false;
-        if (picked != null) {
-          _capturedPhoto = picked;
-        } else {
-          _photoError = 'No photo captured. Try again.';
-        }
-      });
-    } on PlatformException catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _pickingPhoto = false;
-        _photoError = 'Camera permission is required.';
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enable camera permission to take a photo.')),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _pickingPhoto = false;
-        _photoError = 'Failed to capture photo. Please try again.';
-      });
-    }
   }
 
   Future<void> _checkIn() async {
@@ -550,16 +489,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
       _checkInError = null;
     });
 
-    String? photoUrl;
     try {
-      if (_capturedPhoto != null) {
-        photoUrl = await _storageService.uploadPlacePhoto(
-          file: _capturedPhoto!,
-          userId: user.uid,
-          placeId: placeId,
-        );
-      }
-
       await _databaseService.createCheckIn(
         userId: user.uid,
         userName: user.displayName ?? 'Anonymous',
@@ -570,7 +500,6 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
         userLongitude: position.longitude,
         distanceMeters: distanceMeters,
         noiseDb: _lastNoiseDb,
-        photoUrl: photoUrl,
       );
 
       if (!mounted) return;
@@ -587,6 +516,160 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
         _checkingIn = false;
         _checkInError = 'Check-in failed. Please try again.';
       });
+    }
+  }
+
+  // Pick and compress photo to base64 (always downsize/compress on device)
+  Future<void> _pickPhoto() async {
+    if (_photoBase64List.length >= 3) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Maximum 3 photos allowed')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isPickingPhoto = true;
+    });
+
+    try {
+      final XFile? photo = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+      );
+
+      if (photo == null) {
+        setState(() {
+          _isPickingPhoto = false;
+        });
+        return;
+      }
+
+      // Always downsize and compress on device
+      String? base64String;
+      try {
+        final compressedBytes = await FlutterImageCompress.compressWithFile(
+          photo.path,
+          minWidth: 800,
+          minHeight: 800,
+          quality: 80,
+          format: CompressFormat.jpeg,
+        );
+        if (compressedBytes != null) {
+          base64String = ImageService.compressBytesToBase64(compressedBytes);
+        } else {
+          // Fallback: just use original bytes
+          final bytes = await photo.readAsBytes();
+          base64String = ImageService.compressBytesToBase64(bytes);
+        }
+      } catch (_) {
+        // Fallback: just use original bytes
+        final bytes = await photo.readAsBytes();
+        base64String = ImageService.compressBytesToBase64(bytes);
+      }
+
+      if (base64String == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Image could not be compressed enough. Please try a different photo.')),
+        );
+        setState(() {
+          _isPickingPhoto = false;
+        });
+        return;
+      }
+
+      setState(() {
+        _photoBase64List.add(base64String!);
+        _isPickingPhoto = false;
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Photo added (${ImageService.estimateSizeKB(base64String).toStringAsFixed(0)} KB)')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isPickingPhoto = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to pick photo: $e')),
+      );
+    }
+  }
+
+  // Measure noise level using existing NoiseService
+  Future<void> _measureNoiseLevel() async {
+    // Check microphone permission first
+    final micStatus = await Permission.microphone.request();
+    if (!micStatus.isGranted) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Microphone permission is required to measure noise level.')),
+      );
+      return;
+    }
+
+    try {
+      if (!mounted) return;
+      
+      // Show dialog with countdown
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('Measuring Noise'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 16),
+                const Text('Recording for 10 seconds...'),
+                const SizedBox(height: 8),
+                Text(
+                  'Keep your phone still',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+
+      // Measure average noise level over 10 seconds
+      final noiseLevel = await _noiseService.measureAverage(
+        duration: const Duration(seconds: 10),
+      );
+      
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Close dialog
+      
+      if (noiseLevel != null) {
+        setState(() {
+          _measuredNoiseLevel = noiseLevel;
+        });
+        
+        final category = NoiseService.getNoiseCategory(noiseLevel);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Noise measured: ${noiseLevel.toStringAsFixed(1)} dB ($category)'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to measure noise. No readings captured.')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop(); // Close dialog if open
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error measuring noise: $e')),
+      );
     }
   }
 
@@ -622,29 +705,75 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
     });
 
     try {
+      // Check if all detailed attributes are filled
+        final hasAllAttributes = _wifiQuality > 0 &&
+          _comfortLevel > 0 &&
+          _aestheticRating > 0 &&
+          _priceController.text.trim().isNotEmpty;
+
       await _databaseService.createReview(
         userId: user.uid,
-        userName: user.displayName ?? user.email ?? 'Anonymous',
         placeId: widget.place.placeId ?? '',
         placeName: widget.place.name,
         rating: _selectedRating,
         outlets: _selectedOutlets,
         reviewText: _reviewController.text.trim(),
+        wifiQuality: _wifiQuality > 0 ? _wifiQuality : null,
+        averagePrice: _priceController.text.trim().isNotEmpty ? _priceController.text.trim() : null,
+        noiseLevel: _measuredNoiseLevel,
+        comfortLevel: _comfortLevel > 0 ? _comfortLevel : null,
+        aestheticRating: _aestheticRating > 0 ? _aestheticRating : null,
+        userPhotos: _photoBase64List.isNotEmpty ? _photoBase64List : null,
+      );
+
+      // Award points for the review
+      await _pointsService.awardPointsForReview(
+        userId: user.uid,
+        hasPhotos: _photoBase64List.isNotEmpty,
+        hasNoiseMeasurement: _measuredNoiseLevel != null,
+        hasAllAttributes: hasAllAttributes,
+      );
+
+      // Track preferences for recommendations
+      await _preferencesService.trackReviewPreferences(
+        userId: user.uid,
+        wifiQuality: _wifiQuality,
+        comfortLevel: _comfortLevel,
+        aestheticRating: _aestheticRating,
+        noiseLevel: _measuredNoiseLevel,
       );
 
       if (!mounted) return;
       
       // Clear the form
       _reviewController.clear();
+      _priceController.clear();
       setState(() {
         _selectedRating = 0;
         _selectedOutlets = 'None';
+        _wifiQuality = 0;
+        _comfortLevel = 0;
+        _aestheticRating = 0;
+        _measuredNoiseLevel = null;
+        _photoBase64List = [];
         _submittingReview = false;
+        
+        // Refresh averages and photos since data has changed
+        if (widget.place.placeId != null) {
+          _photosFuture = _databaseService.getPlacePhotos(widget.place.placeId!);
+          _attributeAveragesFuture = _databaseService.getPlaceAttributeAverages(widget.place.placeId!);
+        }
       });
 
+      // Calculate points earned
+      int pointsEarned = 10; // Base points
+      if (_photoBase64List.isNotEmpty) pointsEarned += 5;
+      if (_measuredNoiseLevel != null) pointsEarned += 15;
+      if (hasAllAttributes) pointsEarned += 20;
+
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Review submitted successfully!'),
+        SnackBar(
+          content: Text('Review submitted! +$pointsEarned points earned'),
           backgroundColor: Colors.green,
         ),
       );
@@ -706,6 +835,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
         centerTitle: true,
       ),
       body: SingleChildScrollView(
+        controller: _scrollController,
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
@@ -750,6 +880,108 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
               
               const SizedBox(height: 24),
 
+              // User Photos Gallery (if available)
+              if (widget.place.placeId != null)
+                FutureBuilder<List<String>>(
+                  future: _photosFuture,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const SizedBox.shrink();
+                    }
+                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                      return const SizedBox.shrink();
+                    }
+                    final photos = snapshot.data!;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Community Photos',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          height: 120,
+                          child: ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: photos.length,
+                            itemBuilder: (context, index) {
+                              final imageBytes = ImageService.decodeBase64(photos[index]);
+                              if (imageBytes == null) return const SizedBox.shrink();
+                              
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: GestureDetector(
+                                  onTap: () {
+                                    // Show full-screen image viewer with gallery
+                                    showDialog(
+                                      context: context,
+                                      builder: (context) => Dialog(
+                                        backgroundColor: Colors.black,
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Align(
+                                              alignment: Alignment.topRight,
+                                              child: IconButton(
+                                                icon: Icon(Icons.close, color: Colors.white),
+                                                onPressed: () => Navigator.of(context).pop(),
+                                              ),
+                                            ),
+                                            Expanded(
+                                              child: PageView.builder(
+                                                controller: PageController(initialPage: index),
+                                                itemCount: photos.length,
+                                                itemBuilder: (context, pageIndex) {
+                                                  final bytes = ImageService.decodeBase64(photos[pageIndex]);
+                                                  if (bytes == null) return const SizedBox.shrink();
+                                                  return InteractiveViewer(
+                                                    child: Center(
+                                                      child: Image.memory(
+                                                        bytes,
+                                                        fit: BoxFit.contain,
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                            ),
+                                            Padding(
+                                              padding: const EdgeInsets.all(16),
+                                              child: Text(
+                                                '${index + 1} / ${photos.length}',
+                                                style: TextStyle(color: Colors.white),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Image.memory(
+                                      imageBytes,
+                                      width: 120,
+                                      height: 120,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+                    );
+                  },
+                ),
+
               // Ratings Summary (matching homepage card style)
               Column(
                 children: [
@@ -773,7 +1005,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                       ),
                     ),
                   StreamBuilder<List<Review>>(
-                    stream: _databaseService.getPlaceReviews(widget.place.placeId ?? ''),
+                    stream: _reviewsStream,
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
                         return const SizedBox.shrink();
@@ -848,6 +1080,123 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
               
               const SizedBox(height: 32),
               
+              // Place Attributes Section (if data exists)
+              if (widget.place.placeId != null)
+                FutureBuilder<Map<String, dynamic>>(
+                  future: _attributeAveragesFuture,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const SizedBox.shrink();
+                    }
+                    final attrs = snapshot.data;
+                    if (attrs == null || attrs.isEmpty || attrs.values.every((v) => v == null)) {
+                      return const SizedBox.shrink();
+                    }
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Place Details',
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w500,
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Card(
+                          elevation: 2,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              children: [
+                                if (attrs['wifiQuality'] != null)
+                                  _buildAttributeRow(
+                                    Icons.wifi,
+                                    'Wi-Fi Quality',
+                                    attrs['wifiQuality'],
+                                    colorScheme,
+                                  ),
+                                if (attrs['comfortLevel'] != null)
+                                  _buildAttributeRow(
+                                    Icons.chair,
+                                    'Comfort',
+                                    attrs['comfortLevel'],
+                                    colorScheme,
+                                  ),
+                                if (attrs['aestheticRating'] != null)
+                                  _buildAttributeRow(
+                                    Icons.palette,
+                                    'Aesthetic',
+                                    attrs['aestheticRating'],
+                                    colorScheme,
+                                  ),
+                                if (attrs['noiseLevel'] != null)
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 8),
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.volume_up, color: colorScheme.primary),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Text(
+                                            'Noise Level',
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ),
+                                        Text(
+                                          '${attrs['noiseLevel'].toStringAsFixed(1)} dB',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                            color: colorScheme.primary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                if (attrs['averagePrice'] != null)
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 8),
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.euro, color: colorScheme.primary),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Text(
+                                            'Average Price',
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ),
+                                        Text(
+                                          attrs['averagePrice'],
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                            color: colorScheme.primary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 32),
+                      ],
+                    );
+                  },
+                ),
 
               // Review Section
               Text(
@@ -944,85 +1293,6 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                // Place photo capture card
-                Card(
-                  elevation: 2,
-                  color: colorScheme.surface,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Place photo',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            color: colorScheme.onSurface,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        if (_capturedPhoto != null)
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(16),
-                            child: Image.file(
-                              File(_capturedPhoto!.path),
-                              height: 180,
-                              width: double.infinity,
-                              fit: BoxFit.cover,
-                            ),
-                          )
-                        else
-                          Container(
-                            height: 180,
-                            width: double.infinity,
-                            decoration: BoxDecoration(
-                              color: colorScheme.surfaceContainerHighest,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: colorScheme.outlineVariant),
-                            ),
-                            child: const Center(
-                              child: Text('No photo yet'),
-                            ),
-                          ),
-                        if (_photoError != null) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            _photoError!,
-                            style: const TextStyle(color: Colors.red, fontSize: 12),
-                          ),
-                        ],
-                        const SizedBox(height: 12),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: ElevatedButton.icon(
-                            onPressed: _pickingPhoto ? null : _capturePlacePhoto,
-                            icon: const Icon(Icons.camera_alt),
-                            label: Text(
-                              _pickingPhoto ? 'Opening camera...' : 'Take photo',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF6750A4),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(100),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
 
                 // Check-in card
                 Card(
@@ -1193,10 +1463,12 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                         Align(
                           alignment: Alignment.centerLeft,
                           child: ElevatedButton.icon(
-                            onPressed: _isMeasuringNoise ? null : _measureNoise,
+                            onPressed: _measureNoiseLevel,
                             icon: const Icon(Icons.hearing),
                             label: Text(
-                              _isMeasuringNoise ? 'Measuring...' : 'Measure noise',
+                              _measuredNoiseLevel != null 
+                                  ? 'Measured: ${_measuredNoiseLevel!.toStringAsFixed(1)} dB'
+                                  : 'Measure noise',
                               style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w500,
@@ -1212,6 +1484,170 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                             ),
                           ),
                         ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Enhanced Review Attributes
+                Text(
+                  'Optional Details (earn more points!)',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Wi-Fi Quality Slider
+                _buildSliderCard(
+                  'Wi-Fi Quality',
+                  Icons.wifi,
+                  _wifiQuality,
+                  (value) => setState(() => _wifiQuality = value.round()),
+                  colorScheme,
+                ),
+                const SizedBox(height: 12),
+
+                // Comfort Level Slider
+                _buildSliderCard(
+                  'Comfort Level',
+                  Icons.chair,
+                  _comfortLevel,
+                  (value) => setState(() => _comfortLevel = value.round()),
+                  colorScheme,
+                ),
+                const SizedBox(height: 12),
+
+                // Aesthetic Rating Slider
+                _buildSliderCard(
+                  'Aesthetic Rating',
+                  Icons.palette,
+                  _aestheticRating,
+                  (value) => setState(() => _aestheticRating = value.round()),
+                  colorScheme,
+                ),
+                const SizedBox(height: 12),
+
+                // Average Price Input
+                Card(
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        Icon(Icons.euro, color: colorScheme.primary),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: _priceController,
+                            decoration: InputDecoration(
+                              labelText: 'Average Price (e.g., €5-10)',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            keyboardType: TextInputType.text,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Photo Upload Section
+                Card(
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.photo_library, color: colorScheme.primary),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Photos (${_photoBase64List.length}/3)',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: (_photoBase64List.length >= 3 || _isPickingPhoto) ? null : _pickPhoto,
+                              icon: _isPickingPhoto 
+                                ? SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                                : Icon(Icons.add_photo_alternate, size: 18),
+                              label: Text(_isPickingPhoto ? 'Loading...' : 'Add'),
+                              style: ElevatedButton.styleFrom(
+                                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (_photoBase64List.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            height: 80,
+                            child: ListView.builder(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: _photoBase64List.length,
+                              itemBuilder: (context, index) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: Stack(
+                                    children: [
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Image.memory(
+                                          ImageService.decodeBase64(_photoBase64List[index])!,
+                                          width: 80,
+                                          height: 80,
+                                          fit: BoxFit.cover,
+                                        ),
+                                      ),
+                                      Positioned(
+                                        top: 2,
+                                        right: 2,
+                                        child: GestureDetector(
+                                          onTap: () {
+                                            setState(() {
+                                              _photoBase64List.removeAt(index);
+                                            });
+                                          },
+                                          child: Container(
+                                            padding: EdgeInsets.all(4),
+                                            decoration: BoxDecoration(
+                                              color: Colors.black54,
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: Icon(
+                                              Icons.close,
+                                              size: 16,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -1299,7 +1735,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                 ),
                 const SizedBox(height: 16),
                 StreamBuilder<List<Review>>(
-                  stream: _databaseService.getPlaceReviews(widget.place.placeId!),
+                  stream: _reviewsStream,
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const Center(
@@ -1496,44 +1932,91 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Header: User name and date
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: colorScheme.primaryContainer,
-                  child: Text(
-                    review.userName[0].toUpperCase(),
-                    style: TextStyle(
-                      color: colorScheme.primary,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            review.userId != null
+                ? FutureBuilder<String>(
+                    future: UserDisplayNameCache().getDisplayName(review.userId!),
+                    builder: (context, snapshot) {
+                      final displayName = snapshot.data ?? '...';
+                      return Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 20,
+                            backgroundColor: colorScheme.primaryContainer,
+                            child: Text(
+                              displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
+                              style: TextStyle(
+                                color: colorScheme.primary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  displayName,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 16,
+                                    color: colorScheme.onSurface,
+                                  ),
+                                ),
+                                Text(
+                                  _formatDate(review.createdAt),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  )
+                : Row(
                     children: [
-                      Text(
-                        review.userName,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
-                          color: colorScheme.onSurface,
+                      CircleAvatar(
+                        radius: 20,
+                        backgroundColor: colorScheme.primaryContainer,
+                        child: Text(
+                          (review.displayName != null && review.displayName!.isNotEmpty)
+                              ? review.displayName![0].toUpperCase()
+                              : '?',
+                          style: TextStyle(
+                            color: colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
-                      Text(
-                        _formatDate(review.createdAt),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: colorScheme.onSurfaceVariant,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              review.displayName ?? 'Anonymous',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 16,
+                                color: colorScheme.onSurface,
+                              ),
+                            ),
+                            Text(
+                              _formatDate(review.createdAt),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
-                ),
-              ],
-            ),
             const SizedBox(height: 12),
             
             // Rating stars
@@ -1573,6 +2056,102 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                 height: 1.5,
               ),
             ),
+
+            // Display enhanced attributes if available
+            if (review.wifiQuality != null || review.comfortLevel != null || review.aestheticRating != null || review.noiseLevel != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  children: [
+                    if (review.wifiQuality != null)
+                      _buildAttributeChip(Icons.wifi, 'Wi-Fi ${review.wifiQuality}/5', colorScheme),
+                    if (review.comfortLevel != null)
+                      _buildAttributeChip(Icons.chair, 'Comfort ${review.comfortLevel}/5', colorScheme),
+                    if (review.aestheticRating != null)
+                      _buildAttributeChip(Icons.palette, 'Aesthetic ${review.aestheticRating}/5', colorScheme),
+                    if (review.noiseLevel != null)
+                      _buildAttributeChip(Icons.volume_up, '${review.noiseLevel!.toStringAsFixed(1)} dB', colorScheme),
+                    if (review.averagePrice != null)
+                      _buildAttributeChip(Icons.euro, review.averagePrice!, colorScheme),
+                  ],
+                ),
+              ),
+
+            // Display user photos if available
+            if (review.userPhotos != null && review.userPhotos!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Photos',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 100,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: review.userPhotos!.length,
+                        itemBuilder: (context, index) {
+                          final base64Photo = review.userPhotos![index];
+                          final imageBytes = ImageService.decodeBase64(base64Photo);
+                          if (imageBytes == null) return const SizedBox.shrink();
+                          
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: GestureDetector(
+                              onTap: () {
+                                // Show full-screen image
+                                showDialog(
+                                  context: context,
+                                  builder: (context) => Dialog(
+                                    backgroundColor: Colors.black,
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Align(
+                                          alignment: Alignment.topRight,
+                                          child: IconButton(
+                                            icon: Icon(Icons.close, color: Colors.white),
+                                            onPressed: () => Navigator.of(context).pop(),
+                                          ),
+                                        ),
+                                        InteractiveViewer(
+                                          child: Image.memory(
+                                            imageBytes,
+                                            fit: BoxFit.contain,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.memory(
+                                  imageBytes,
+                                  width: 100,
+                                  height: 100,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),
@@ -1595,5 +2174,110 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
     } else {
       return '${date.day}/${date.month}/${date.year}';
     }
+  }
+
+  Widget _buildAttributeRow(IconData icon, String label, double value, ColorScheme colorScheme) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Icon(icon, color: colorScheme.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          if (value > 0)
+            Row(
+              children: List.generate(5, (index) {
+                return Icon(
+                  index < value.round() ? Icons.star : Icons.star_border,
+                  size: 18,
+                  color: colorScheme.primary,
+                );
+              }),
+            )
+          else
+            Text(
+              'No data',
+              style: TextStyle(
+                fontSize: 14,
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAttributeChip(IconData icon, String label, ColorScheme colorScheme) {
+    return Chip(
+      avatar: Icon(icon, size: 16, color: colorScheme.primary),
+      label: Text(
+        label,
+        style: TextStyle(fontSize: 12),
+      ),
+      backgroundColor: colorScheme.primaryContainer.withAlpha(100),
+      padding: EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+      visualDensity: VisualDensity.compact,
+    );
+  }
+
+  Widget _buildSliderCard(String label, IconData icon, int value, Function(double) onChanged, ColorScheme colorScheme) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: colorScheme.primary),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                if (value > 0)
+                  Row(
+                    children: List.generate(5, (index) {
+                      return Icon(
+                        index < value ? Icons.star : Icons.star_border,
+                        size: 18,
+                        color: colorScheme.primary,
+                      );
+                    }),
+                  ),
+              ],
+            ),
+            GestureDetector(
+              onVerticalDragStart: (_) {},
+              child: Slider(
+                value: value.toDouble(),
+                min: 0,
+                max: 5,
+                divisions: 5,
+                label: value == 0 ? 'Not rated' : value.toString(),
+                onChanged: onChanged,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/database_service.dart';
+import '../services/points_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
 import '../services/favorites_manager.dart';
@@ -9,6 +10,7 @@ import 'help_support_page.dart';
 import 'favorites_page.dart';
 import 'my_reviews_page.dart';
 import 'edit_profile_page.dart';
+import 'leaderboard_page.dart';
 
 class ProfilePage extends StatefulWidget {
   final VoidCallback? onSignOut;
@@ -21,9 +23,12 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   final AuthService _authService = AuthService();
   final DatabaseService _databaseService = DatabaseService();
+  final PointsService _pointsService = PointsService();
   final FavoritesManager _favoritesManager = FavoritesManager();
   int _favoriteCount = 0;
   int _reviewCount = 0;
+  int _userPoints = 0;
+  int? _userRank;
   bool _loading = true;
   String? _profilePicturePath;
   VoidCallback _favoritesListener = () {};
@@ -87,10 +92,15 @@ class _ProfilePageState extends State<ProfilePage> {
     try {
       final favoriteCount = await _databaseService.getFavoriteCount(user.uid);
       final reviewCount = await _databaseService.getUserReviewCount(user.uid);
+      final userPoints = await _pointsService.getUserPoints(user.uid);
+      final userRank = await _pointsService.getUserRank(user.uid);
+      
       if (mounted) {
         setState(() {
           _favoriteCount = favoriteCount;
           _reviewCount = reviewCount;
+          _userPoints = userPoints;
+          _userRank = userRank;
           _loading = false;
         });
       }
@@ -158,13 +168,26 @@ class _ProfilePageState extends State<ProfilePage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        user.displayName ?? 'User',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w600,
-                          color: colorScheme.onSurface,
-                        ),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              user.displayName ?? 'User',
+                              style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w600,
+                                color: colorScheme.onSurface,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(
+                            _getAchievementIcon(),
+                            size: 20,
+                            color: _getAchievementColor(),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -197,6 +220,213 @@ class _ProfilePageState extends State<ProfilePage> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(0, 0, 0, 32),
               children: [
+                // Points and Achievement Card
+                Card(
+                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  elevation: 3,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [colorScheme.primaryContainer, colorScheme.secondaryContainer],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Agora Points',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: colorScheme.onPrimaryContainer,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                TweenAnimationBuilder<int>(
+                                  tween: IntTween(begin: 0, end: _userPoints),
+                                  duration: const Duration(seconds: 2),
+                                  curve: Curves.easeOutExpo,
+                                  builder: (context, value, child) {
+                                    return Text(
+                                      '$value',
+                                      style: TextStyle(
+                                        fontSize: 48,
+                                        color: colorScheme.onPrimaryContainer,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: -1,
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
+                            TweenAnimationBuilder<double>(
+                              tween: Tween<double>(begin: 0.8, end: 1.0),
+                              duration: const Duration(milliseconds: 800),
+                              curve: Curves.elasticOut,
+                              builder: (context, scale, child) {
+                                return Transform.scale(
+                                  scale: scale,
+                                  child: child,
+                                );
+                              },
+                              child: Column(
+                                children: [
+                                  Icon(
+                                    _getAchievementIcon(),
+                                    size: 64,
+                                    color: _getAchievementColor(),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _pointsService.getAchievementLevel(_userPoints),
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: colorScheme.onPrimaryContainer,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        // Progress to next level
+                        (() {
+                          final points = _userPoints;
+                          String nextLevel = '';
+                          double progress = 0.0;
+                          int pointsNeeded = 0;
+
+                          if (points < 100) {
+                            nextLevel = 'Bronze';
+                            progress = points / 100;
+                            pointsNeeded = 100 - points;
+                          } else if (points < 500) {
+                            nextLevel = 'Silver';
+                            progress = (points - 100) / 400;
+                            pointsNeeded = 500 - points;
+                          } else if (points < 1000) {
+                            nextLevel = 'Gold';
+                            progress = (points - 500) / 500;
+                            pointsNeeded = 1000 - points;
+                          } else if (points < 5000) {
+                            nextLevel = 'Legend';
+                            progress = (points - 1000) / 4000;
+                            pointsNeeded = 5000 - points;
+                          } else {
+                            return const SizedBox.shrink();
+                          }
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'Progress to $nextLevel',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: colorScheme.onPrimaryContainer.withAlpha(200),
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  Text(
+                                    '$pointsNeeded more pts',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: colorScheme.onPrimaryContainer.withAlpha(200),
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Stack(
+                                children: [
+                                  Container(
+                                    height: 12,
+                                    width: double.infinity,
+                                    decoration: BoxDecoration(
+                                      color: colorScheme.onPrimaryContainer.withAlpha(40),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                  TweenAnimationBuilder<double>(
+                                    tween: Tween<double>(begin: 0, end: progress),
+                                    duration: const Duration(seconds: 1),
+                                    curve: Curves.easeInOutCubic,
+                                    builder: (context, value, child) {
+                                      return FractionallySizedBox(
+                                        widthFactor: value.clamp(0.0, 1.0),
+                                        child: Container(
+                                          height: 12,
+                                          decoration: BoxDecoration(
+                                            gradient: LinearGradient(
+                                              colors: [
+                                                colorScheme.onPrimaryContainer.withAlpha(150),
+                                                colorScheme.onPrimaryContainer,
+                                              ],
+                                            ),
+                                            borderRadius: BorderRadius.circular(10),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: colorScheme.onPrimaryContainer.withAlpha(100),
+                                                blurRadius: 4,
+                                                offset: const Offset(0, 2),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ],
+                          );
+                        })(),
+                        const SizedBox(height: 12),
+                        Divider(color: colorScheme.onPrimaryContainer.withAlpha(80)),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Global Rank: ${_userRank ?? 'Unranked'}',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: colorScheme.onPrimaryContainer,
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (context) => const LeaderboardPage(),
+                                  ),
+                                );
+                              },
+                              child: const Text('View Leaderboard →'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
                 Card(
                   margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   elevation: 2,
@@ -371,4 +601,34 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
     );
   }
-}
+  IconData _getAchievementIcon() {
+    final achievement = _pointsService.getAchievementLevel(_userPoints);
+    switch (achievement) {
+      case 'Legend':
+        return Icons.emoji_events;
+      case 'Gold':
+        return Icons.workspace_premium;
+      case 'Silver':
+        return Icons.military_tech;
+      case 'Bronze':
+        return Icons.stars;
+      default:
+        return Icons.person;
+    }
+  }
+
+  Color _getAchievementColor() {
+    final achievement = _pointsService.getAchievementLevel(_userPoints);
+    switch (achievement) {
+      case 'Legend':
+        return Colors.purple;
+      case 'Gold':
+        return Colors.amber;
+      case 'Silver':
+        return Colors.grey[400]!;
+      case 'Bronze':
+        return Colors.brown;
+      default:
+        return Colors.grey;
+    }
+  }}

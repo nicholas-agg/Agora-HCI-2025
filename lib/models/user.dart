@@ -3,12 +3,14 @@ class AppUser {
   final String email;
   final String displayName;
   final DateTime createdAt;
+  final int points; // Gamification points
 
   AppUser({
     required this.uid,
     required this.email,
     required this.displayName,
     required this.createdAt,
+    this.points = 0,
   });
 
   // Create AppUser from JSON
@@ -18,6 +20,7 @@ class AppUser {
       email: json['email'] as String,
       displayName: json['displayName'] as String,
       createdAt: DateTime.parse(json['createdAt'] as String),
+      points: json['points'] as int? ?? 0,
     );
   }
 
@@ -28,6 +31,7 @@ class AppUser {
       'email': email,
       'displayName': displayName,
       'createdAt': createdAt.toIso8601String(),
+      'points': points,
     };
   }
 
@@ -38,6 +42,7 @@ class AppUser {
       email: data['email'] as String,
       displayName: data['displayName'] as String,
       createdAt: (data['createdAt'] as dynamic).toDate(),
+      points: data['points'] as int? ?? 0,
     );
   }
 
@@ -47,6 +52,7 @@ class AppUser {
       'email': email,
       'displayName': displayName,
       'createdAt': createdAt,
+      'points': points,
     };
   }
 }

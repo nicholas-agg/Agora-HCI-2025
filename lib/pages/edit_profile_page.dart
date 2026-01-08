@@ -3,6 +3,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 
+
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class EditProfilePage extends StatefulWidget {
@@ -101,7 +104,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
         );
         await user.reauthenticateWithCredential(cred);
       }
-      
+
       // Save profile picture path locally if selected
       if (_imageFile != null) {
         try {
@@ -111,12 +114,25 @@ class _EditProfilePageState extends State<EditProfilePage> {
           debugPrint('Failed to save profile picture path: $e');
         }
       }
-      
-      // Update display name
+
+      // Update display name in Firebase Auth
       if (_nameController.text != user.displayName && _nameController.text.isNotEmpty) {
         await user.updateDisplayName(_nameController.text);
+        // Also update displayName in Firestore users collection
+        final firestore = FirebaseFirestore.instance;
+        await firestore.collection('users').doc(user.uid).update({'displayName': _nameController.text});
+
+        // Fallback: Update all legacy reviews with userName field for this user
+        final legacyReviews = await firestore
+            .collection('reviews')
+            .where('userId', isEqualTo: null)
+            .where('userName', isEqualTo: user.displayName)
+            .get();
+        for (final doc in legacyReviews.docs) {
+          await doc.reference.update({'userName': _nameController.text});
+        }
       }
-      
+
       // Update email
       if (_emailController.text != user.email && _emailController.text.isNotEmpty) {
         await user.verifyBeforeUpdateEmail(_emailController.text);
@@ -126,12 +142,14 @@ class _EditProfilePageState extends State<EditProfilePage> {
           );
         }
       }
-      
+
       // Update password
       if (_newPasswordController.text.isNotEmpty) {
         await user.updatePassword(_newPasswordController.text);
       }
-      
+
+      // No need to update reviews: username is now fetched live from userId.
+
       await user.reload();
       setState(() { _loading = false; });
       if (mounted) {
