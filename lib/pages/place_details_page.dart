@@ -1,11 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/review.dart';
 import '../models/study_place.dart';
@@ -17,6 +17,7 @@ import '../services/preferences_service.dart';
 
 import '../services/image_service.dart';
 import '../services/user_display_name_cache.dart';
+import '../services/favorites_manager.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 
 class PlaceDetailsPage extends StatefulWidget {
@@ -31,6 +32,7 @@ class PlaceDetailsPage extends StatefulWidget {
 
 class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
   final ScrollController _scrollController = ScrollController();
+  final FavoritesManager _favoritesManager = FavoritesManager();
 
     // For editing review
     int _editRating = 0;
@@ -317,7 +319,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
   List<String> _photoBase64List = []; // Base64 encoded photos
   bool _isPickingPhoto = false;
 
-  bool _isMeasuringNoise = false;
+  final bool _isMeasuringNoise = false;
   double? _lastNoiseDb;
   String? _noiseError;
 
@@ -346,6 +348,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
     _checkIfUserReviewed();
     _checkIfCheckedIn();
     _trackPlaceView();
+    _favoritesManager.initialize();
   }
 
   Future<void> _trackPlaceView() async {
@@ -805,6 +808,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final isFavorite = _favoritesManager.isFavorite(widget.place);
     return Scaffold(
       backgroundColor: colorScheme.surface,
       appBar: AppBar(
@@ -833,6 +837,32 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
           ],
         ),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: Icon(
+              isFavorite ? Icons.favorite : Icons.favorite_border,
+              color: isFavorite ? colorScheme.primary : colorScheme.onSurfaceVariant,
+            ),
+            tooltip: isFavorite ? 'Unfavorite' : 'Favorite',
+            onPressed: () async {
+              final messengerContext = context;
+              await _favoritesManager.toggleFavorite(widget.place);
+              if (!mounted) return;
+              setState(() {});
+              ScaffoldMessenger.of(messengerContext).showSnackBar(
+                SnackBar(
+                  content: Text(isFavorite ? 'Removed from favorites' : 'Added to favorites'),
+                  backgroundColor: isFavorite ? Colors.red : Colors.green,
+                ),
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.map),
+            tooltip: 'View on Map',
+            onPressed: _openMap,
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         controller: _scrollController,
@@ -843,37 +873,43 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
             children: [
               // Place Photo
               if (_getPhotoUrl(widget.place.photoReference) != null)
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(28),
-                  child: Image.network(
-                    _getPhotoUrl(widget.place.photoReference)!,
-                    height: 253,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Container(
+                Hero(
+                  tag: 'place-image-${widget.place.placeId}',
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(28),
+                    child: Image.network(
+                      _getPhotoUrl(widget.place.photoReference)!,
                       height: 253,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFECE6F0),
-                        borderRadius: BorderRadius.circular(28),
-                      ),
-                      child: const Center(
-                        child: Icon(Icons.image_not_supported, size: 60),
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        height: 253,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFECE6F0),
+                          borderRadius: BorderRadius.circular(28),
+                        ),
+                        child: const Center(
+                          child: Icon(Icons.image_not_supported, size: 60),
+                        ),
                       ),
                     ),
                   ),
                 )
               else
-                Container(
-                  height: 253,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFECE6F0),
-                    borderRadius: BorderRadius.circular(28),
-                  ),
-                  child: Center(
-                    child: Icon(
-                      _getCategoryIcon(widget.place.type),
-                      size: 60,
-                      color: colorScheme.primary,
+                Hero(
+                  tag: 'place-image-${widget.place.placeId}',
+                  child: Container(
+                    height: 253,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFECE6F0),
+                      borderRadius: BorderRadius.circular(28),
+                    ),
+                    child: Center(
+                      child: Icon(
+                        _getCategoryIcon(widget.place.type),
+                        size: 60,
+                        color: colorScheme.primary,
+                      ),
                     ),
                   ),
                 ),
@@ -1051,31 +1087,52 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
               const SizedBox(height: 32),
               
               // Rating Section
-              Text(
-                'Rating',
-                style: TextStyle(
-                  fontSize: 36,
-                  fontWeight: FontWeight.w500,
-                  color: colorScheme.onSurface,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: List.generate(5, (index) {
-                  return GestureDetector(
-                    onTap: () {
-                      if (!mounted) return;
-                      setState(() {
-                        _selectedRating = index + 1;
-                      });
-                    },
-                    child: Icon(
-                      index < _selectedRating ? Icons.star : Icons.star_border,
-                      size: 40,
-                      color: colorScheme.primary,
-                    ),
+              TweenAnimationBuilder<double>(
+                duration: const Duration(milliseconds: 600),
+                tween: Tween(begin: 0.0, end: 1.0),
+                curve: Curves.easeOutBack,
+                builder: (context, value, child) {
+                  return Transform.scale(
+                    scale: value,
+                    child: child,
                   );
-                }),
+                },
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Rating',
+                      style: TextStyle(
+                        fontSize: 36,
+                        fontWeight: FontWeight.w500,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: List.generate(5, (index) {
+                        return GestureDetector(
+                          onTap: () {
+                            if (!mounted) return;
+                            setState(() {
+                              _selectedRating = index + 1;
+                            });
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            transform: Matrix4.identity()
+                              ..scale(index < _selectedRating ? 1.1 : 1.0),
+                            child: Icon(
+                              index < _selectedRating ? Icons.star : Icons.star_border,
+                              size: 40,
+                              color: colorScheme.primary,
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                  ],
+                ),
               ),
               
               const SizedBox(height: 32),
@@ -1139,7 +1196,16 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                                     padding: const EdgeInsets.symmetric(vertical: 8),
                                     child: Row(
                                       children: [
-                                        Icon(Icons.volume_up, color: colorScheme.primary),
+                                        TweenAnimationBuilder<double>(
+                                          duration: const Duration(seconds: 1),
+                                          tween: Tween(begin: 0.0, end: 1.0),
+                                          builder: (context, value, child) {
+                                            return Icon(
+                                              Icons.volume_up,
+                                              color: colorScheme.primary.withValues(alpha: value),
+                                            );
+                                          },
+                                        ),
                                         const SizedBox(width: 12),
                                         Expanded(
                                           child: Text(
@@ -1317,9 +1383,21 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                         const SizedBox(height: 12),
                         Row(
                           children: [
-                            CircleAvatar(
-                              backgroundColor: colorScheme.primaryContainer,
-                              child: const Icon(Icons.place, color: Colors.white),
+                            TweenAnimationBuilder<double>(
+                              duration: const Duration(milliseconds: 500),
+                              tween: Tween(begin: 1.0, end: _checkedIn ? 1.2 : 1.0),
+                              builder: (context, scale, child) {
+                                return Transform.scale(
+                                  scale: scale,
+                                  child: CircleAvatar(
+                                    backgroundColor: _checkedIn ? Colors.green : colorScheme.primaryContainer,
+                                    child: Icon(
+                                      _checkedIn ? Icons.check : Icons.place,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -1414,10 +1492,13 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                         const SizedBox(height: 12),
                         Row(
                           children: [
-                            CircleAvatar(
-                              backgroundColor: colorScheme.primaryContainer,
-                              child: const Icon(Icons.volume_up, color: Colors.white),
-                            ),
+                            if (_isMeasuringNoise)
+                              _buildSoundWave(colorScheme)
+                            else
+                              CircleAvatar(
+                                backgroundColor: colorScheme.primaryContainer,
+                                child: const Icon(Icons.volume_up, color: Colors.white),
+                              ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(
@@ -1435,7 +1516,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                                   ),
                                   Text(
                                     _isMeasuringNoise
-                                        ? 'Measuring...'
+                                        ? (NoiseService.getNoiseCategory(_lastNoiseDb ?? 0))
                                         : 'Tap to capture a snapshot',
                                     style: TextStyle(
                                       color: colorScheme.onSurfaceVariant,
@@ -1444,12 +1525,6 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                                 ],
                               ),
                             ),
-                            if (_isMeasuringNoise)
-                              const SizedBox(
-                                height: 24,
-                                width: 24,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              ),
                           ],
                         ),
                         if (_noiseError != null) ...[
@@ -1870,6 +1945,29 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
     );
   }
 
+  Future<void> _openMap() async {
+    final placeId = widget.place.placeId;
+    final name = Uri.encodeComponent(widget.place.name);
+    String url;
+    if (placeId != null && placeId.isNotEmpty) {
+      // Use Google Maps Place ID search
+      url = 'https://www.google.com/maps/search/?api=1&query=Google&query_place_id=$placeId';
+    } else {
+      // Fallback to coordinates
+      final lat = widget.place.location.latitude;
+      final lng = widget.place.location.longitude;
+      url = 'https://www.google.com/maps/search/?api=1&query=$name&query=$lat,$lng';
+    }
+    if (await canLaunchUrl(Uri.parse(url))) {
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    } else {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open map.')),
+      );
+    }
+  }
+
   Widget _buildOutletButton(String label) {
     final isSelected = _selectedOutlets == label;
     final isFirst = label == 'None';
@@ -2278,6 +2376,66 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildSoundWave(ColorScheme colorScheme) {
+    return SizedBox(
+      width: 40,
+      height: 40,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: List.generate(4, (index) => _AnimatedBar(index: index, colorScheme: colorScheme)),
+      ),
+    );
+  }
+}
+
+class _AnimatedBar extends StatefulWidget {
+  final int index;
+  final ColorScheme colorScheme;
+  const _AnimatedBar({required this.index, required this.colorScheme});
+
+  @override
+  State<_AnimatedBar> createState() => _AnimatedBarState();
+}
+
+class _AnimatedBarState extends State<_AnimatedBar> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: Duration(milliseconds: 400 + (widget.index * 150)),
+      vsync: this,
+    )..repeat(reverse: true);
+    _animation = Tween<double>(begin: 0.2, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        return Container(
+          width: 4,
+          height: 30 * _animation.value,
+          decoration: BoxDecoration(
+            color: widget.colorScheme.primary,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        );
+      },
     );
   }
 }

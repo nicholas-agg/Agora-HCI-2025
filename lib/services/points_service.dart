@@ -1,13 +1,16 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:logger/logger.dart';
+
+final logger = Logger();
 
 class PointsService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   // Point values for different actions
-  static const int POINTS_SUBMIT_REVIEW = 10;
-  static const int POINTS_UPLOAD_PHOTO = 5;
-  static const int POINTS_NOISE_MEASUREMENT = 15;
-  static const int POINTS_DETAILED_REVIEW = 20; // All attributes filled
+  static const int pointsSubmitReview = 10;
+  static const int pointsUploadPhoto = 5;
+  static const int pointsNoiseMeasurement = 15;
+  static const int pointsDetailedReview = 20; // All attributes filled
 
   // Award points to a user
   Future<void> awardPoints(String userId, int points, String reason) async {
@@ -39,7 +42,7 @@ class PointsService {
       });
     } catch (e) {
       // Silent fail - points are not critical
-      print('Error awarding points: $e');
+      logger.e('Error awarding points: $e');
     }
   }
 
@@ -116,21 +119,21 @@ class PointsService {
     required bool hasNoiseMeasurement,
     required bool hasAllAttributes,
   }) async {
-    int totalPoints = POINTS_SUBMIT_REVIEW;
+    int totalPoints = pointsSubmitReview;
     String reason = 'Submitted review';
 
     if (hasPhotos) {
-      totalPoints += POINTS_UPLOAD_PHOTO;
+      totalPoints += pointsUploadPhoto;
       reason += ' with photos';
     }
 
     if (hasNoiseMeasurement) {
-      totalPoints += POINTS_NOISE_MEASUREMENT;
+      totalPoints += pointsNoiseMeasurement;
       reason += ' and noise measurement';
     }
 
     if (hasAllAttributes) {
-      totalPoints += POINTS_DETAILED_REVIEW;
+      totalPoints += pointsDetailedReview;
       reason += ' (detailed)';
     }
 

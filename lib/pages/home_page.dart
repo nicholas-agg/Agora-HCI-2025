@@ -52,12 +52,14 @@ class _MyHomePageState extends State<MyHomePage> {
           .collection('reviews')
           .where('placeId', isEqualTo: placeId)
           .get();
+      if (!mounted) return;
       setState(() {
         _agoraAvgRating = avg;
         _agoraReviewCount = snapshot.docs.length;
         _agoraReviewsLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _agoraAvgRating = null;
         _agoraReviewCount = null;
@@ -199,12 +201,15 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   BitmapDescriptor _getMarkerIconForType(String type) {
-    if (type.toLowerCase().contains('cafe') && _cafeIcon != null)
+    if (type.toLowerCase().contains('cafe') && _cafeIcon != null) {
       return _cafeIcon!;
-    if (type.toLowerCase().contains('library') && _libraryIcon != null)
+    }
+    if (type.toLowerCase().contains('library') && _libraryIcon != null) {
       return _libraryIcon!;
-    if (type.toLowerCase().contains('coworking') && _coworkingIcon != null)
+    }
+    if (type.toLowerCase().contains('coworking') && _coworkingIcon != null) {
       return _coworkingIcon!;
+    }
     if (_otherIcon != null) return _otherIcon!;
     // Fallback to default marker if icons not loaded yet
     return BitmapDescriptor.defaultMarker;
@@ -739,8 +744,25 @@ class _MyHomePageState extends State<MyHomePage> {
                 customBorder: const CircleBorder(),
                 onTap: () {
                   Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const RecommendationsPage(),
+                    PageRouteBuilder(
+                      pageBuilder: (context, animation, secondaryAnimation) =>
+                          const RecommendationsPage(),
+                      transitionsBuilder:
+                          (context, animation, secondaryAnimation, child) {
+                        var curve = Curves.easeInOutBack;
+                        var curvedAnimation = CurvedAnimation(
+                          parent: animation,
+                          curve: curve,
+                        );
+                        return ScaleTransition(
+                          scale: curvedAnimation,
+                          child: FadeTransition(
+                            opacity: animation,
+                            child: child,
+                          ),
+                        );
+                      },
+                      transitionDuration: const Duration(milliseconds: 600),
                     ),
                   );
                 },
@@ -752,7 +774,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: colorScheme.shadow.withOpacity(0.18),
+                        color: colorScheme.shadow.withValues(alpha: 0.18),
                         blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
@@ -1133,44 +1155,48 @@ class _MyHomePageState extends State<MyHomePage> {
                                           _selectedPlace!.photoReference,
                                         ) !=
                                         null)
-                                      ClipRRect(
-                                        borderRadius: const BorderRadius.vertical(
-                                          top: Radius.circular(12),
-                                        ),
-                                        child: Image.network(
-                                          _getPhotoUrl(
-                                            _selectedPlace!.photoReference,
-                                          )!,
-                                          height: 160,
-                                          width: double.infinity,
-                                          fit: BoxFit.cover,
-                                          errorBuilder:
-                                              (context, error, stackTrace) =>
-                                                  Container(
-                                                    height: 160,
-                                                    color: colorScheme
-                                                        .surfaceContainerHighest,
-                                                    child: const Icon(
-                                                      Icons.image_not_supported,
-                                                      size: 40,
-                                                    ),
-                                                  ),
-                                        ),
-                                      )
-                                    else
-                                      Container(
-                                        height: 160,
-                                        decoration: BoxDecoration(
-                                          color: colorScheme.surfaceContainerHighest,
+                                      Hero(
+                                        tag: 'place-image-${_selectedPlace!.placeId}',
+                                        child: ClipRRect(
                                           borderRadius: const BorderRadius.vertical(
                                             top: Radius.circular(12),
                                           ),
+                                          child: Image.network(
+                                            _getPhotoUrl(
+                                              _selectedPlace!.photoReference,
+                                            )!,
+                                            height: 160,
+                                            width: double.infinity,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (context, error, stackTrace) =>
+                                                Container(
+                                              height: 160,
+                                              color: colorScheme.surfaceContainerHighest,
+                                              child: const Icon(
+                                                Icons.image_not_supported,
+                                                size: 40,
+                                              ),
+                                            ),
+                                          ),
                                         ),
-                                        child: Center(
-                                          child: Icon(
-                                            Icons.place,
-                                            color: colorScheme.primary,
-                                            size: 50,
+                                      )
+                                    else
+                                      Hero(
+                                        tag: 'place-image-${_selectedPlace!.placeId}',
+                                        child: Container(
+                                          height: 160,
+                                          decoration: BoxDecoration(
+                                            color: colorScheme.surfaceContainerHighest,
+                                            borderRadius: const BorderRadius.vertical(
+                                              top: Radius.circular(12),
+                                            ),
+                                          ),
+                                          child: Center(
+                                            child: Icon(
+                                              Icons.place,
+                                              color: colorScheme.primary,
+                                              size: 50,
+                                            ),
                                           ),
                                         ),
                                       ),

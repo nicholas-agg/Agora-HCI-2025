@@ -1,4 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:logger/logger.dart';
+
+final logger = Logger();
 
 /// Tracks user preferences and interactions for personalized recommendations
 class PreferencesService {
@@ -33,7 +36,7 @@ class PreferencesService {
       }, SetOptions(merge: true));
     } catch (e) {
       // Silent fail for analytics
-      print('Failed to track place view: $e');
+      logger.e('Failed to track place view: $e');
     }
   }
 
@@ -70,7 +73,7 @@ class PreferencesService {
         await prefs.doc('attributes').set(data, SetOptions(merge: true));
       }
     } catch (e) {
-      print('Failed to track review preferences: $e');
+      logger.e('Failed to track review preferences: $e');
     }
   }
 
@@ -109,7 +112,7 @@ class PreferencesService {
         });
       }
     } catch (e) {
-      print('Failed to track favorite: $e');
+      logger.e('Failed to track favorite: $e');
     }
   }
 
@@ -128,7 +131,7 @@ class PreferencesService {
         'favoriteTypes': favoritePlaceTypes.data() ?? {},
       };
     } catch (e) {
-      print('Failed to get user preferences: $e');
+      logger.e('Failed to get user preferences: $e');
       return {};
     }
   }
@@ -156,7 +159,7 @@ class PreferencesService {
       
       return places.take(limit).toList();
     } catch (e) {
-      print('Failed to get most viewed places: $e');
+      logger.e('Failed to get most viewed places: $e');
       return [];
     }
   }
@@ -176,9 +179,9 @@ class PreferencesService {
         typeScores[type] = (typeScores[type] ?? 0) + viewCount.toDouble();
       });
       
-      favoriteTypes.forEach((type, count) {
+      favoriteTypes.forEach((type, favCount) {
         // Weight favorites 3x more than views
-        typeScores[type] = (typeScores[type] ?? 0) + (count as int).toDouble() * 3;
+        typeScores[type] = (typeScores[type] ?? 0) + (favCount as int).toDouble() * 3;
       });
       
       // Sort by score
@@ -187,7 +190,7 @@ class PreferencesService {
       
       return sortedTypes.map((e) => e.key).toList();
     } catch (e) {
-      print('Failed to get preferred place types: $e');
+      logger.e('Failed to get preferred place types: $e');
       return [];
     }
   }

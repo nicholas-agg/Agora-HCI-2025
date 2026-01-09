@@ -4,6 +4,9 @@ import '../models/study_place.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:logger/logger.dart';
+
+final logger = Logger();
 
 /// Generates personalized place recommendations based on user preferences
 class RecommendationService {
@@ -72,7 +75,7 @@ class RecommendationService {
       }
       return recommendations.take(limit).toList();
     } catch (e) {
-      print('Error getting recommendations: $e');
+      logger.e('Error getting recommendations: $e');
       return [];
     }
   }
@@ -94,7 +97,7 @@ class RecommendationService {
       }
       final apiKey = dotenv.env['GOOGLE_MAPS_API_KEY'];
       if (apiKey == null || apiKey.isEmpty) {
-        print('Google Maps API key not found in .env');
+        logger.e('Google Maps API key not found in .env');
         return [];
       }
       final lat = location.latitude;
@@ -120,9 +123,13 @@ class RecommendationService {
         String recType = type;
         if (result['types'] != null && result['types'] is List) {
           final types = (result['types'] as List).cast<String>();
-          if (types.contains('library')) recType = 'Library';
-          else if (types.any((t) => t.contains('coworking'))) recType = 'Coworking';
-          else if (types.contains('cafe')) recType = 'Cafe';
+          if (types.contains('library')) {
+            recType = 'Library';
+            } else if (types.any((t) => t.contains('coworking'))) {
+            recType = 'Coworking';
+            } else if (types.contains('cafe')) {
+            recType = 'Cafe';
+            }
         }
         String? photoRef;
         if (result['photos'] != null && (result['photos'] as List).isNotEmpty) {
@@ -143,7 +150,7 @@ class RecommendationService {
       }
       return found;
     } catch (e) {
-      print('Error searching Google Places: $e');
+      logger.e('Error searching Google Places: $e');
       return [];
     }
   }
@@ -174,7 +181,7 @@ class RecommendationService {
         );
       }).toList();
     } catch (e) {
-      print('Error getting all places: $e');
+      logger.e('Error getting all places: $e');
       // Return empty list if there's an error or no places in Firestore
       return [];
     }
@@ -216,7 +223,7 @@ class RecommendationService {
       
       return scoredPlaces.take(limit).map((e) => e.key).toList();
     } catch (e) {
-      print('Error getting similar places: $e');
+      logger.e('Error getting similar places: $e');
       return [];
     }
   }
