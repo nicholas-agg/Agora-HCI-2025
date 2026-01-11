@@ -9,10 +9,12 @@ import 'help_support_page.dart';
 import 'favorites_page.dart';
 import 'my_reviews_page.dart';
 import 'edit_profile_page.dart';
+import 'recently_visited_page.dart';
 
 class ProfilePage extends StatefulWidget {
   final VoidCallback? onSignOut;
-  const ProfilePage({super.key, this.onSignOut});
+  final VoidCallback? onBackToHome;
+  const ProfilePage({super.key, this.onSignOut, this.onBackToHome});
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
@@ -24,6 +26,7 @@ class _ProfilePageState extends State<ProfilePage> {
   final FavoritesManager _favoritesManager = FavoritesManager();
   int _favoriteCount = 0;
   int _reviewCount = 0;
+  int _recentCount = 0;
   bool _loading = true;
   String? _profilePicturePath;
   VoidCallback _favoritesListener = () {};
@@ -81,10 +84,12 @@ class _ProfilePageState extends State<ProfilePage> {
     try {
       final favoriteCount = await _databaseService.getFavoriteCount(user.uid);
       final reviewCount = await _databaseService.getUserReviewCount(user.uid);
+      final recentCount = await _databaseService.getUserCheckInCount(user.uid);
       if (mounted) {
         setState(() {
           _favoriteCount = favoriteCount;
           _reviewCount = reviewCount;
+          _recentCount = recentCount;
           _loading = false;
         });
       }
@@ -114,19 +119,16 @@ class _ProfilePageState extends State<ProfilePage> {
       appBar: AppBar(
         backgroundColor: colorScheme.surface,
         elevation: 1,
-        leading: (() {
-          // Hide back button if in MainNavigation (bottom nav), show otherwise
-          final mainNavState = context.findAncestorStateOfType<State<StatefulWidget>>();
-          if (mainNavState != null && mainNavState.widget.runtimeType.toString() == 'MainNavigation') {
-            return null;
-          }
-          return IconButton(
-            icon: Icon(Icons.arrow_back, color: colorScheme.onSurface),
-            onPressed: () {
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: colorScheme.onSurface),
+          onPressed: () {
+            if (widget.onBackToHome != null) {
+              widget.onBackToHome!();
+            } else {
               Navigator.of(context).maybePop();
-            },
-          );
-        })(),
+            }
+          },
+        ),
         title: Text('Profile', style: TextStyle(color: colorScheme.onSurface, fontWeight: FontWeight.w500)),
         centerTitle: true,
       ),
@@ -253,14 +255,29 @@ class _ProfilePageState extends State<ProfilePage> {
                   child: ListTile(
                     leading: const Icon(Icons.history, color: Color(0xFF6750A4)),
                     title: const Text('Recently Visited', style: TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: const Text('No history in demo'),
+                    subtitle: _loading
+                        ? const Text('Loading...')
+                        : Text('$_recentCount visit${_recentCount == 1 ? '' : 's'}'),
+                    trailing: !_loading && _recentCount > 0
+                        ? Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: colorScheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '$_recentCount',
+                              style: TextStyle(
+                                color: colorScheme.primary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          )
+                        : null,
                     onTap: () {
-                      showDialog(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Recently Visited'),
-                          content: const Text('No history for demo user.'),
-                          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))],
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const RecentlyVisitedPage(),
                         ),
                       );
                     },
