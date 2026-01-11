@@ -19,8 +19,9 @@ class MainNavigation extends StatefulWidget {
 
 class _MainNavigationState extends State<MainNavigation> {
   int _currentIndex = 0;
+  GlobalKey<State<StatefulWidget>> _profilePageKey = GlobalKey();
 
-  late final List<Widget> _pages;
+  late List<Widget> _pages;
 
   @override
   void initState() {
@@ -31,12 +32,17 @@ class _MainNavigationState extends State<MainNavigation> {
         username: widget.username,
       ),
       FavoritesPage(onLogout: widget.onLogout),
-      ProfilePage(onSignOut: widget.onLogout),
+      ProfilePage(key: _profilePageKey, onSignOut: widget.onLogout),
     ];
   }
 
   void _onTabTapped(int index) {
     setState(() {
+      // If profile tab is tapped, recreate with new key to force reload
+      if (index == 2) {
+        _profilePageKey = GlobalKey();
+        _pages[2] = ProfilePage(key: _profilePageKey, onSignOut: widget.onLogout);
+      }
       _currentIndex = index;
     });
   }
@@ -45,7 +51,10 @@ class _MainNavigationState extends State<MainNavigation> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
-      body: _pages[_currentIndex],
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _pages,
+      ),
       bottomNavigationBar: Container(
         height: 80,
         decoration: BoxDecoration(

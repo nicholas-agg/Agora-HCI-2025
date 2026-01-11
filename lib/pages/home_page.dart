@@ -21,6 +21,7 @@ import 'package:provider/provider.dart';
 import '../services/theme_manager.dart';
 import 'recent_reviews_page.dart';
 
+import '../services/recommendation_service.dart';
 import 'recommendations_page.dart';
 
 class MyHomePage extends StatefulWidget {
@@ -84,6 +85,13 @@ class _MyHomePageState extends State<MyHomePage> {
   BitmapDescriptor? _libraryIcon;
   BitmapDescriptor? _coworkingIcon;
   BitmapDescriptor? _otherIcon;
+  BitmapDescriptor? _magicalIcon; // For recommendations
+
+  // Recommendations
+  List<StudyPlace> _recommendations = [];
+  bool _loadingRecommendations = false;
+  bool _showRecommendationButton = false;
+  Timer? _recommendationButtonTimer;
 
   // Search functionality
   final TextEditingController _searchController = TextEditingController();
@@ -191,12 +199,18 @@ class _MyHomePageState extends State<MyHomePage> {
     final libraryIcon = await createIcon(Icons.menu_book, Colors.blue);
     final coworkingIcon = await createIcon(Icons.work, Colors.deepPurple);
     final otherIcon = await createIcon(Icons.location_on, Colors.grey);
+    
+    // Create magical icon for recommendations using primary color
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    final magicalIcon = await createIcon(Icons.star_rounded, primaryColor);
+    
     if (!mounted) return;
     setState(() {
       _cafeIcon = cafeIcon;
       _libraryIcon = libraryIcon;
       _coworkingIcon = coworkingIcon;
       _otherIcon = otherIcon;
+      _magicalIcon = magicalIcon;
     });
   }
 
@@ -215,6 +229,41 @@ class _MyHomePageState extends State<MyHomePage> {
     return BitmapDescriptor.defaultMarker;
   }
 
+  Future<void> _loadRecommendations() async {
+    if (!mounted) return;
+    setState(() {
+      _loadingRecommendations = true;
+    });
+    try {
+      final recommendations = await RecommendationService().getRecommendations(limit: 15);
+      if (!mounted) return;
+      setState(() {
+        _recommendations = recommendations;
+        _loadingRecommendations = false;
+        _showRecommendationButton = true;
+      });
+      debugPrint('Recommendations loaded: ${recommendations.length}');
+      
+      // Auto-hide button after 10 seconds
+      _recommendationButtonTimer?.cancel();
+      _recommendationButtonTimer = Timer(const Duration(seconds: 10), () {
+        if (mounted) {
+          setState(() {
+            _showRecommendationButton = false;
+          });
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadingRecommendations = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error loading recommendations: $e')),
+      );
+    }
+  }
+
   // Map styling is now handled via Google Cloud Map IDs
   // No need for manual style application
 
@@ -225,6 +274,7 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   void dispose() {
     _searchController.dispose();
+    _recommendationButtonTimer?.cancel();
     super.dispose();
   }
 
@@ -699,23 +749,42 @@ class _MyHomePageState extends State<MyHomePage> {
                     myLocationEnabled: true,
                     myLocationButtonEnabled: false,
                     zoomControlsEnabled: false,
-                    markers: _places
-                        .map(
-                          (place) => Marker(
-                            markerId: MarkerId(place.name),
-                            position: place.location,
-                            onTap: () {
-                              setState(() {
-                                _selectedPlace = place;
-                              });
-                              _fetchAgoraReviewStats(place.placeId ?? '');
-                              _mapController?.animateCamera(
-                                CameraUpdate.newLatLng(place.location),
-                              );
-                            },
-                            icon: _getMarkerIconForType(place.type),
-                          ),
-                        )
+                    markers: [
+                      // Regular places
+                      ..._places.map(
+                        (place) => Marker(
+                          markerId: MarkerId(place.name),
+                          position: place.location,
+                          onTap: () {
+                            setState(() {
+                              _selectedPlace = place;
+                            });
+                            _fetchAgoraReviewStats(place.placeId ?? '');
+                            _mapController?.animateCamera(
+                              CameraUpdate.newLatLng(place.location),
+                            );
+                          },
+                          icon: _getMarkerIconForType(place.type),
+                        ),
+                      ),
+                      // Magical recommendation pins
+                      ..._recommendations.map(
+                        (place) => Marker(
+                          markerId: MarkerId('rec_${place.name}'),
+                          position: place.location,
+                          onTap: () {
+                            setState(() {
+                              _selectedPlace = place;
+                            });
+                            _fetchAgoraReviewStats(place.placeId ?? '');
+                            _mapController?.animateCamera(
+                              CameraUpdate.newLatLng(place.location),
+                            );
+                          },
+                          icon: _magicalIcon ?? BitmapDescriptor.defaultMarker,
+                        ),
+                      ),
+                    ]
                         .toSet(),
                     onMapCreated: (controller) {
                       _mapController = controller;
@@ -731,7 +800,7 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
           ),
 
-          // Recommendations Button (right side, circular, visually prominent)
+          // Refresh Recommendations Button (right side, circular, visually prominent)
           Positioned(
             right: 24,
             // Vertically between middle and current location button
@@ -742,71 +811,35 @@ class _MyHomePageState extends State<MyHomePage> {
               shape: const CircleBorder(),
               child: InkWell(
                 customBorder: const CircleBorder(),
-                onTap: () {
-                  Navigator.of(context).push(
-                    PageRouteBuilder(
-                      pageBuilder: (context, animation, secondaryAnimation) =>
-                          const RecommendationsPage(),
-                      transitionsBuilder:
-                          (context, animation, secondaryAnimation, child) {
-                        var curve = Curves.easeInOutBack;
-                        var curvedAnimation = CurvedAnimation(
-                          parent: animation,
-                          curve: curve,
-                        );
-                        return ScaleTransition(
-                          scale: curvedAnimation,
-                          child: FadeTransition(
-                            opacity: animation,
-                            child: child,
-                          ),
-                        );
-                      },
-                      transitionDuration: const Duration(milliseconds: 600),
-                    ),
-                  );
-                },
+                onTap: _loadingRecommendations ? null : _loadRecommendations,
                 child: Container(
                   width: 56,
                   height: 56,
                   decoration: BoxDecoration(
-                    color: colorScheme.secondary,
                     shape: BoxShape.circle,
+                    color: colorScheme.primary,
                     boxShadow: [
                       BoxShadow(
-                        color: colorScheme.shadow.withValues(alpha: 0.18),
-                        blurRadius: 8,
+                        color: Colors.black.withAlpha(80),
+                        blurRadius: 4,
                         offset: const Offset(0, 2),
                       ),
                     ],
                   ),
-                  child: TweenAnimationBuilder<double>(
-                    tween: Tween<double>(begin: 0, end: 2 * 3.14159),
-                    duration: const Duration(seconds: 4),
-                    builder: (context, value, child) {
-                      return Transform.rotate(
-                        angle: value,
-                        child: child,
-                      );
-                    },
-                    onEnd: () {}, // Handled by repetition logic if needed, but we'll use a simpler pulse next
-                    child: TweenAnimationBuilder<double>(
-                      tween: Tween<double>(begin: 1.0, end: 1.2),
-                      duration: const Duration(milliseconds: 1000),
-                      curve: Curves.easeInOut,
-                      builder: (context, scale, child) {
-                        return Transform.scale(
-                          scale: 1.0 + (0.1 * sin(DateTime.now().millisecondsSinceEpoch / 500)),
-                          child: child,
-                        );
-                      },
-                      child: const Icon(
+                  child: _loadingRecommendations
+                    ? SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(colorScheme.onPrimary),
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : Icon(
                         Icons.auto_awesome,
-                        color: Colors.white,
-                        size: 30,
+                        color: colorScheme.onPrimary,
+                        size: 28,
                       ),
-                    ),
-                  ),
                 ),
               ),
             ),
@@ -1538,6 +1571,86 @@ class _MyHomePageState extends State<MyHomePage> {
                       },
                     );
                   },
+                ),
+              ),
+            ),
+
+          // Ephemeral Recommendations Button (top-center, elegant and compact)
+          if (_showRecommendationButton)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 210,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween<double>(begin: 0, end: 1),
+                  duration: const Duration(milliseconds: 500),
+                  curve: Curves.elasticOut,
+                  builder: (context, value, child) {
+                    return Opacity(
+                      opacity: value.clamp(0.0, 1.0),
+                      child: Transform.scale(
+                        scale: 0.8 + (value * 0.2),
+                        child: child,
+                      ),
+                    );
+                  },
+                  child: GestureDetector(
+                    onTap: () {
+                      _recommendationButtonTimer?.cancel();
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => RecommendationsPage(
+                            recommendations: _recommendations,
+                          ),
+                        ),
+                      );
+                      setState(() {
+                        _showRecommendationButton = false;
+                      });
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            colorScheme.primary,
+                            colorScheme.primary.withValues(alpha: 0.9),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(
+                            color: colorScheme.primary.withValues(alpha: 0.4),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.auto_awesome,
+                            color: colorScheme.onPrimary,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'View Recommendations',
+                            style: TextStyle(
+                              color: colorScheme.onPrimary,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),

@@ -53,6 +53,7 @@ dependencies:
   flutter_image_compress: ^2.4.0
   logger: ^2.6.2
   url_launcher: ^6.3.2
+  google_generative_ai: ^0.4.0
 
 dev_dependencies:
   flutter_test:

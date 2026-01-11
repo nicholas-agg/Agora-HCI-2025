@@ -13,7 +13,6 @@ import '../services/auth_service.dart';
 import '../services/database_service.dart';
 import '../services/noise_service.dart';
 import '../services/points_service.dart';
-import '../services/preferences_service.dart';
 
 import '../services/image_service.dart';
 import '../services/user_display_name_cache.dart';
@@ -305,7 +304,6 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
   final NoiseService _noiseService = NoiseService();
   final ImagePicker _imagePicker = ImagePicker();
   final PointsService _pointsService = PointsService();
-  final PreferencesService _preferencesService = PreferencesService();
   
   int _selectedRating = 0;
   String _selectedOutlets = 'None'; // None, Few, A lot
@@ -347,20 +345,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
     _reviewsStream = _databaseService.getPlaceReviews(widget.place.placeId ?? '');
     _checkIfUserReviewed();
     _checkIfCheckedIn();
-    _trackPlaceView();
     _favoritesManager.initialize();
-  }
-
-  Future<void> _trackPlaceView() async {
-    final user = _authService.currentUser;
-    if (user == null || widget.place.placeId == null) return;
-    
-    await _preferencesService.trackPlaceView(
-      userId: user.uid,
-      placeId: widget.place.placeId!,
-      placeName: widget.place.name,
-      placeType: widget.place.type,
-    );
   }
 
   Future<void> _checkIfUserReviewed() async {
@@ -735,15 +720,6 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
         hasPhotos: _photoBase64List.isNotEmpty,
         hasNoiseMeasurement: _measuredNoiseLevel != null,
         hasAllAttributes: hasAllAttributes,
-      );
-
-      // Track preferences for recommendations
-      await _preferencesService.trackReviewPreferences(
-        userId: user.uid,
-        wifiQuality: _wifiQuality,
-        comfortLevel: _comfortLevel,
-        aestheticRating: _aestheticRating,
-        noiseLevel: _measuredNoiseLevel,
       );
 
       if (!mounted) return;

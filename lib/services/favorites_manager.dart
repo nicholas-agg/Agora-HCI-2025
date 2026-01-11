@@ -6,7 +6,6 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'database_service.dart';
-import 'preferences_service.dart';
 
 // Favorites manager with cloud sync and local fallback
 class FavoritesManager extends ChangeNotifier {
@@ -16,7 +15,6 @@ class FavoritesManager extends ChangeNotifier {
 
   final List<StudyPlace> _favorites = [];
   final DatabaseService _databaseService = DatabaseService();
-  final PreferencesService _preferencesService = PreferencesService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
   
   List<StudyPlace> get favorites => List.unmodifiable(_favorites);
@@ -117,17 +115,6 @@ class FavoritesManager extends ChangeNotifier {
       if (user != null) {
         // Add to cloud database
         await _databaseService.addFavorite(user.uid, place);
-        // Track preference
-        if (place.placeId != null) {
-          await _preferencesService.trackFavorite(
-            userId: user.uid,
-            placeId: place.placeId!,
-            placeName: place.name,
-            placeType: place.type,
-            isFavorited: true,
-          );
-        }
-        // Cloud listener will automatically update local list
       } else {
         // Add to local storage only
         _favorites.add(place);
@@ -152,14 +139,6 @@ class FavoritesManager extends ChangeNotifier {
       if (user != null && place.placeId != null) {
         // Remove from cloud database
         await _databaseService.removeFavorite(user.uid, place.placeId!);
-        // Track preference
-        await _preferencesService.trackFavorite(
-          userId: user.uid,
-          placeId: place.placeId!,
-          placeName: place.name,
-          placeType: place.type,
-          isFavorited: false,
-        );
         // Cloud listener will automatically update local list
       } else {
         // Remove from local storage only

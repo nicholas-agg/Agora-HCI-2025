@@ -1,46 +1,38 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../services/recommendation_service.dart';
 import '../models/study_place.dart';
 import 'place_details_page.dart';
 
 class RecommendationsPage extends StatefulWidget {
-  const RecommendationsPage({super.key});
+  final List<StudyPlace> recommendations;
+  const RecommendationsPage({super.key, required this.recommendations});
 
   @override
   State<RecommendationsPage> createState() => _RecommendationsPageState();
 }
 
 class _RecommendationsPageState extends State<RecommendationsPage> {
-  final RecommendationService _recommendationService = RecommendationService();
   List<StudyPlace> _recommendations = [];
-  bool _loading = true;
+  bool _loading = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _fetchRecommendations();
+    _recommendations = widget.recommendations;
+    if (_recommendations.isEmpty) {
+      _fetchRecommendations();
+    }
   }
 
   Future<void> _fetchRecommendations() async {
+    final RecommendationService _recommendationService = RecommendationService();
     setState(() {
       _loading = true;
       _error = null;
     });
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      setState(() {
-        _loading = false;
-        _error = 'You must be signed in to get recommendations.';
-      });
-      return;
-    }
     try {
-      final recs = await _recommendationService.getRecommendations(
-        user.uid,
-        limit: 20,
-      );
+      final recs = await _recommendationService.getRecommendations(limit: 20);
       if (!mounted) return;
       setState(() {
         _recommendations = recs;
