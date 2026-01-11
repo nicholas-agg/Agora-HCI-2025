@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/study_place.dart';
 import '../models/review.dart';
+import '../models/check_in.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class DatabaseService {
@@ -180,12 +181,14 @@ class DatabaseService {
     return _firestore
         .collection('reviews')
         .where('userId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs.map((doc) {
+      final reviews = snapshot.docs.map((doc) {
         return Review.fromFirestore(doc.data(), doc.id);
       }).toList();
+
+      reviews.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return reviews;
     });
   }
 
@@ -262,6 +265,8 @@ class DatabaseService {
     String? photoUrl,
   }) async {
     try {
+      final now = DateTime.now();
+      final expiresAt = now.add(const Duration(hours: 1));
       final data = {
         'userId': userId,
         'userName': userName,
@@ -275,11 +280,47 @@ class DatabaseService {
         'noiseDb': noiseDb,
         'photoUrl': photoUrl,
         'createdAt': FieldValue.serverTimestamp(),
+        'expiresAt': Timestamp.fromDate(expiresAt),
       };
 
       await _firestore.collection('checkins').add(data);
     } catch (e) {
       throw Exception(_handleFirestoreError(e));
+    }
+  }
+
+  /// Returns the number of active (not expired) check-ins for a place
+  Stream<int> getActiveCheckInCount(String placeId) {
+    final now = Timestamp.fromDate(DateTime.now());
+    return _firestore
+        .collection('checkins')
+        .where('placeId', isEqualTo: placeId)
+        .where('expiresAt', isGreaterThan: now)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.length);
+  }
+
+  /// Returns the user's active check-in for a place, or null if none
+  Future<CheckIn?> getUserActiveCheckIn({
+    required String userId,
+    required String placeId,
+  }) async {
+    try {
+      final now = Timestamp.fromDate(DateTime.now());
+      final query = await _firestore
+          .collection('checkins')
+          .where('userId', isEqualTo: userId)
+          .where('placeId', isEqualTo: placeId)
+          .where('expiresAt', isGreaterThan: now)
+          .orderBy('expiresAt', descending: true)
+          .limit(1)
+          .get();
+      if (query.docs.isNotEmpty) {
+        return CheckIn.fromDoc(query.docs.first);
+      }
+      return null;
+    } catch (e) {
+      return null;
     }
   }
 
@@ -301,7 +342,35 @@ class DatabaseService {
     }
   }
 
-  // Get average rating for a place from user reviews (with trust-based weighting)
+  Stream<List<CheckIn>> getRecentCheckIns({
+    required String userId,
+    int limit = 20,
+  }) {
+    return _firestore
+        .collection('checkins')
+        .where('userId', isEqualTo: userId)
+        .limit(limit)
+        .snapshots()
+        .map((snapshot) {
+      final checkIns = snapshot.docs.map((doc) => CheckIn.fromDoc(doc)).toList();
+      checkIns.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return checkIns;
+    });
+  }
+
+  Future<int> getUserCheckInCount(String userId) async {
+    try {
+      final query = await _firestore
+          .collection('checkins')
+          .where('userId', isEqualTo: userId)
+          .get();
+      return query.size;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  // Get average rating for a place from user reviews
   Future<double?> getPlaceAverageRating(String placeId) async {
     try {
       final snapshot = await _firestore

@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../models/review.dart';
 import '../models/study_place.dart';
+import '../models/check_in.dart';
 import '../services/auth_service.dart';
 import '../services/database_service.dart';
 import '../services/noise_service.dart';
@@ -30,8 +31,25 @@ class PlaceDetailsPage extends StatefulWidget {
 
 
 class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
+    String _formatDuration(Duration duration) {
+      final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+      final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+      final hours = duration.inHours;
+      if (hours > 0) {
+        return '$hours:$minutes:$seconds';
+      } else {
+        return '$minutes:$seconds';
+      }
+    }
   final ScrollController _scrollController = ScrollController();
   final FavoritesManager _favoritesManager = FavoritesManager();
+
+  // For anonymous check-in count
+  late Stream<int> _activeCheckInCountStream = const Stream.empty();
+  // For user's own active check-in
+  CheckIn? _userActiveCheckIn;
+  Timer? _checkInTimer;
+  Duration? _checkInTimeLeft;
 
     // For editing review
     int _editRating = 0;
@@ -343,9 +361,65 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
         ? _databaseService.getPlaceAttributeAverages(widget.place.placeId!) 
         : Future.value({});
     _reviewsStream = _databaseService.getPlaceReviews(widget.place.placeId ?? '');
+    _activeCheckInCountStream = widget.place.placeId != null
+        ? _databaseService.getActiveCheckInCount(widget.place.placeId!)
+        : const Stream.empty();
     _checkIfUserReviewed();
-    _checkIfCheckedIn();
+    _checkUserActiveCheckIn();
     _favoritesManager.initialize();
+  }
+
+  @override
+  void dispose() {
+    _checkInTimer?.cancel();
+    _scrollController.dispose();
+    _reviewController.dispose();
+    _editReviewController.dispose();
+    _priceController.dispose();
+    _noiseService.dispose();
+    super.dispose();
+  }
+
+  void _checkUserActiveCheckIn() async {
+    final user = _authService.currentUser;
+    final placeId = widget.place.placeId;
+    if (user == null || placeId == null) return;
+    final checkIn = await _databaseService.getUserActiveCheckIn(userId: user.uid, placeId: placeId);
+    if (!mounted) return;
+    setState(() {
+      _userActiveCheckIn = checkIn;
+      _checkedIn = checkIn != null;
+    });
+    _startCheckInTimer();
+  }
+
+  void _startCheckInTimer() {
+    _checkInTimer?.cancel();
+    if (_userActiveCheckIn == null) {
+      setState(() => _checkInTimeLeft = null);
+      return;
+    }
+    final now = DateTime.now();
+    final expires = _userActiveCheckIn!.expiresAt;
+    final duration = expires.difference(now);
+    if (duration.isNegative) {
+      setState(() => _checkInTimeLeft = null);
+      return;
+    }
+    setState(() => _checkInTimeLeft = duration);
+    _checkInTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      final left = expires.difference(DateTime.now());
+      if (left.isNegative) {
+        timer.cancel();
+        setState(() {
+          _checkInTimeLeft = null;
+          _checkedIn = false;
+          _userActiveCheckIn = null;
+        });
+      } else {
+        setState(() => _checkInTimeLeft = left);
+      }
+    });
   }
 
   Future<void> _checkIfUserReviewed() async {
@@ -370,26 +444,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
     }
   }
 
-  Future<void> _checkIfCheckedIn() async {
-    final user = _authService.currentUser;
-    final placeId = widget.place.placeId;
-    if (user == null || placeId == null) return;
-    final already = await _databaseService.isCheckedIn(userId: user.uid, placeId: placeId);
-    if (!mounted) return;
-    setState(() {
-      _checkedIn = already;
-    });
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    _reviewController.dispose();
-    _editReviewController.dispose();
-    _priceController.dispose();
-    _noiseService.dispose();
-    super.dispose();
-  }
+  // (Replaced by _checkUserActiveCheckIn)
 
   String? _getPhotoUrl(String? photoReference) {
     if (photoReference == null) return null;
@@ -420,11 +475,18 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
       return;
     }
 
-    if (_checkedIn) {
+    // Check for active check-in
+    final activeCheckIn = await _databaseService.getUserActiveCheckIn(userId: user.uid, placeId: placeId);
+    if (activeCheckIn != null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('You are already checked in here.')),
       );
+      setState(() {
+        _checkedIn = true;
+        _userActiveCheckIn = activeCheckIn;
+      });
+      _startCheckInTimer();
       return;
     }
 
@@ -493,8 +555,9 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
       if (!mounted) return;
       setState(() {
         _checkingIn = false;
-        _checkedIn = true;
       });
+      // Refresh active check-in state
+      _checkUserActiveCheckIn();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Checked in successfully!'), backgroundColor: Colors.green),
       );
@@ -1068,8 +1131,9 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                 tween: Tween(begin: 0.0, end: 1.0),
                 curve: Curves.easeOutBack,
                 builder: (context, value, child) {
-                  return Transform.scale(
-                    scale: value,
+                  return Transform(
+                    transform: Matrix4.identity()..scale(value),
+                    alignment: Alignment.center,
                     child: child,
                   );
                 },
@@ -1336,7 +1400,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                 ),
                 const SizedBox(height: 24),
 
-                // Check-in card
+                // Check-in card with anonymous count and timer
                 Card(
                   elevation: 2,
                   color: colorScheme.surface,
@@ -1388,6 +1452,11 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                                       color: colorScheme.onSurface,
                                     ),
                                   ),
+                                  if (_checkedIn && _checkInTimeLeft != null)
+                                    Text(
+                                      'Time left: ${_formatDuration(_checkInTimeLeft!)}',
+                                      style: TextStyle(color: colorScheme.primary),
+                                    ),
                                   Text(
                                     _checkedIn
                                         ? 'Great! Others can see your presence.'
@@ -1412,6 +1481,26 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                             style: const TextStyle(color: Colors.red, fontSize: 12),
                           ),
                         ],
+                        const SizedBox(height: 12),
+                        StreamBuilder<int>(
+                          stream: _activeCheckInCountStream,
+                          builder: (context, snapshot) {
+                            final count = snapshot.data ?? 0;
+                            if (count > 0) {
+                              return Text(
+                                count == 1
+                                    ? '1 person checked in here now'
+                                    : '$count people checked in here now',
+                                style: TextStyle(
+                                  color: colorScheme.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              );
+                            } else {
+                              return const SizedBox.shrink();
+                            }
+                          },
+                        ),
                         const SizedBox(height: 12),
                         Align(
                           alignment: Alignment.centerLeft,
@@ -1442,6 +1531,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                       ],
                     ),
                   ),
+
                 ),
                 const SizedBox(height: 16),
 
