@@ -39,11 +39,14 @@ jobs:
       - name: Build APK
         run: flutter build apk --release
 
+      - name: Rename APK file
+        run: mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/agora-release.apk
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: agora-apk-${{ github.event.inputs.release_version }}
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: build/app/outputs/flutter-apk/agora-release.apk
 
       - name: Create and Upload Release
         uses: softprops/action-gh-release@v2
@@ -52,6 +55,6 @@ jobs:
           name: Release ${{ github.event.inputs.release_version }}
           body: |
             Release of version ${{ github.event.inputs.release_version }}.
-          files: build/app/outputs/flutter-apk/app-release.apk
+          files: build/app/outputs/flutter-apk/agora-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
