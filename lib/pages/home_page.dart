@@ -23,6 +23,8 @@ import 'recent_reviews_page.dart';
 
 import '../services/recommendation_service.dart';
 import 'recommendations_page.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../models/check_in.dart';
 
 class MyHomePage extends StatefulWidget {
   final VoidCallback onLogout;
@@ -199,11 +201,11 @@ class _MyHomePageState extends State<MyHomePage> {
     final libraryIcon = await createIcon(Icons.menu_book, Colors.blue);
     final coworkingIcon = await createIcon(Icons.work, Colors.deepPurple);
     final otherIcon = await createIcon(Icons.location_on, Colors.grey);
-    
+
     // Create magical icon for recommendations using primary color
     final primaryColor = Theme.of(context).colorScheme.primary;
     final magicalIcon = await createIcon(Icons.star_rounded, primaryColor);
-    
+
     if (!mounted) return;
     setState(() {
       _cafeIcon = cafeIcon;
@@ -235,7 +237,9 @@ class _MyHomePageState extends State<MyHomePage> {
       _loadingRecommendations = true;
     });
     try {
-      final recommendations = await RecommendationService().getRecommendations(limit: 15);
+      final recommendations = await RecommendationService().getRecommendations(
+        limit: 15,
+      );
       if (!mounted) return;
       setState(() {
         _recommendations = recommendations;
@@ -243,7 +247,7 @@ class _MyHomePageState extends State<MyHomePage> {
         _showRecommendationButton = true;
       });
       debugPrint('Recommendations loaded: ${recommendations.length}');
-      
+
       // Auto-hide button after 10 seconds
       _recommendationButtonTimer?.cancel();
       _recommendationButtonTimer = Timer(const Duration(seconds: 10), () {
@@ -727,6 +731,82 @@ class _MyHomePageState extends State<MyHomePage> {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
         children: [
+          // Active check-in banner with cancel option
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 8,
+            left: 16,
+            right: 16,
+            child: Builder(
+              builder: (context) {
+                final user = FirebaseAuth.instance.currentUser;
+                if (user == null) return const SizedBox.shrink();
+                return StreamBuilder<CheckIn?>(
+                  stream: DatabaseService().userActiveCheckInStream(
+                    userId: user.uid,
+                  ),
+                  builder: (context, snapshot) {
+                    final active = snapshot.data;
+                    if (active == null) return const SizedBox.shrink();
+                    return Material(
+                      elevation: 2,
+                      borderRadius: BorderRadius.circular(12),
+                      color: colorScheme.primaryContainer.withValues(
+                        alpha: 0.95,
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.timer, color: colorScheme.primary),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Checked in at ${active.placeName}',
+                                style: TextStyle(
+                                  color: colorScheme.onPrimaryContainer,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            TextButton.icon(
+                              onPressed: () async {
+                                try {
+                                  await DatabaseService().cancelCheckInById(
+                                    active.id,
+                                  );
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Check-in cancelled'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                } catch (e) {
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Failed to cancel: $e'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              },
+                              icon: const Icon(Icons.cancel, color: Colors.red),
+                              label: const Text('Cancel'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
           // 1. Full Screen Map with smooth transition
           Positioned.fill(
             child: Builder(
@@ -784,8 +864,7 @@ class _MyHomePageState extends State<MyHomePage> {
                           icon: _magicalIcon ?? BitmapDescriptor.defaultMarker,
                         ),
                       ),
-                    ]
-                        .toSet(),
+                    ].toSet(),
                     onMapCreated: (controller) {
                       _mapController = controller;
                     },
@@ -827,19 +906,21 @@ class _MyHomePageState extends State<MyHomePage> {
                     ],
                   ),
                   child: _loadingRecommendations
-                    ? SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(colorScheme.onPrimary),
-                          strokeWidth: 2,
+                      ? SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              colorScheme.onPrimary,
+                            ),
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : Icon(
+                          Icons.auto_awesome,
+                          color: colorScheme.onPrimary,
+                          size: 28,
                         ),
-                      )
-                    : Icon(
-                        Icons.auto_awesome,
-                        color: colorScheme.onPrimary,
-                        size: 28,
-                      ),
                 ),
               ),
             ),
@@ -1139,19 +1220,17 @@ class _MyHomePageState extends State<MyHomePage> {
               duration: const Duration(milliseconds: 300),
               transitionBuilder: (Widget child, Animation<double> animation) {
                 return SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0, 1),
-                    end: Offset.zero,
-                  ).animate(
-                    CurvedAnimation(
-                      parent: animation,
-                      curve: Curves.easeOutCubic,
-                    ),
-                  ),
-                  child: FadeTransition(
-                    opacity: animation,
-                    child: child,
-                  ),
+                  position:
+                      Tween<Offset>(
+                        begin: const Offset(0, 1),
+                        end: Offset.zero,
+                      ).animate(
+                        CurvedAnimation(
+                          parent: animation,
+                          curve: Curves.easeOutCubic,
+                        ),
+                      ),
+                  child: FadeTransition(opacity: animation, child: child),
                 );
               },
               child: _selectedPlace == null
@@ -1189,11 +1268,13 @@ class _MyHomePageState extends State<MyHomePage> {
                                         ) !=
                                         null)
                                       Hero(
-                                        tag: 'place-image-${_selectedPlace!.placeId}',
+                                        tag:
+                                            'place-image-${_selectedPlace!.placeId}',
                                         child: ClipRRect(
-                                          borderRadius: const BorderRadius.vertical(
-                                            top: Radius.circular(12),
-                                          ),
+                                          borderRadius:
+                                              const BorderRadius.vertical(
+                                                top: Radius.circular(12),
+                                              ),
                                           child: Image.network(
                                             _getPhotoUrl(
                                               _selectedPlace!.photoReference,
@@ -1201,28 +1282,36 @@ class _MyHomePageState extends State<MyHomePage> {
                                             height: 160,
                                             width: double.infinity,
                                             fit: BoxFit.cover,
-                                            errorBuilder: (context, error, stackTrace) =>
-                                                Container(
-                                              height: 160,
-                                              color: colorScheme.surfaceContainerHighest,
-                                              child: const Icon(
-                                                Icons.image_not_supported,
-                                                size: 40,
-                                              ),
-                                            ),
+                                            errorBuilder:
+                                                (
+                                                  context,
+                                                  error,
+                                                  stackTrace,
+                                                ) => Container(
+                                                  height: 160,
+                                                  color: colorScheme
+                                                      .surfaceContainerHighest,
+                                                  child: const Icon(
+                                                    Icons.image_not_supported,
+                                                    size: 40,
+                                                  ),
+                                                ),
                                           ),
                                         ),
                                       )
                                     else
                                       Hero(
-                                        tag: 'place-image-${_selectedPlace!.placeId}',
+                                        tag:
+                                            'place-image-${_selectedPlace!.placeId}',
                                         child: Container(
                                           height: 160,
                                           decoration: BoxDecoration(
-                                            color: colorScheme.surfaceContainerHighest,
-                                            borderRadius: const BorderRadius.vertical(
-                                              top: Radius.circular(12),
-                                            ),
+                                            color: colorScheme
+                                                .surfaceContainerHighest,
+                                            borderRadius:
+                                                const BorderRadius.vertical(
+                                                  top: Radius.circular(12),
+                                                ),
                                           ),
                                           child: Center(
                                             child: Icon(
@@ -1243,227 +1332,235 @@ class _MyHomePageState extends State<MyHomePage> {
                                           GestureDetector(
                                             onTap: () async {
                                               final rootContext = context;
-                                              final wasFavorite = _favoritesManager
-                                                  .isFavorite(_selectedPlace!);
-                                              await _favoritesManager.toggleFavorite(
-                                                _selectedPlace!,
-                                              );
+                                              final wasFavorite =
+                                                  _favoritesManager.isFavorite(
+                                                    _selectedPlace!,
+                                                  );
+                                              await _favoritesManager
+                                                  .toggleFavorite(
+                                                    _selectedPlace!,
+                                                  );
                                               if (!mounted) return;
                                               setState(() {});
                                               if (!rootContext.mounted) return;
                                               ScaffoldMessenger.of(
                                                 rootContext,
                                               ).showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              wasFavorite
-                                                  ? '${_selectedPlace!.name} removed from favorites'
-                                                  : '${_selectedPlace!.name} added to favorites',
-                                            ),
-                                            duration: const Duration(
-                                              seconds: 2,
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                      child: Container(
-                                        padding: const EdgeInsets.all(4),
-                                        decoration: BoxDecoration(
-                                          color: colorScheme.surface.withValues(
-                                            alpha: 0.8,
-                                          ),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: Icon(
-                                          _favoritesManager.isFavorite(
-                                                _selectedPlace!,
-                                              )
-                                              ? Icons.favorite
-                                              : Icons.favorite_border,
-                                          size: 18,
-                                          color:
-                                              _favoritesManager.isFavorite(
-                                                _selectedPlace!,
-                                              )
-                                              ? Colors.red
-                                              : colorScheme.onSurface,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    // Close button
-                                    GestureDetector(
-                                      onTap: () =>
-                                          setState(() => _selectedPlace = null),
-                                      child: Container(
-                                        padding: const EdgeInsets.all(4),
-                                        decoration: BoxDecoration(
-                                          color: colorScheme.surface.withValues(
-                                            alpha: 0.8,
-                                          ),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: Icon(
-                                          Icons.close,
-                                          size: 18,
-                                          color: colorScheme.onSurface,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.all(12.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(
-                                      _selectedPlace!.type
-                                              .toLowerCase()
-                                              .contains('cafe')
-                                          ? Icons.local_cafe
-                                          : _selectedPlace!.type
-                                                .toLowerCase()
-                                                .contains('library')
-                                          ? Icons.menu_book
-                                          : _selectedPlace!.type
-                                                .toLowerCase()
-                                                .contains('coworking')
-                                          ? Icons.work
-                                          : Icons.location_on,
-                                      color: colorScheme.primary,
-                                      size: 20,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        _selectedPlace!.name,
-                                        style: TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w400,
-                                          color: colorScheme.onSurface,
-                                          fontFamily: 'Inter',
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                // Google reviews row
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.star,
-                                      size: 16,
-                                      color: colorScheme.onSurface,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      '${_selectedPlace!.rating != null ? _selectedPlace!.rating!.toStringAsFixed(1) : "N/A"} (Google, ${_selectedPlace!.userRatingsTotal ?? 0} reviews)',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                        color: colorScheme.onSurface,
-                                        fontFamily: 'Inter',
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                // Agora reviews row
-                                const SizedBox(height: 2),
-                                Builder(
-                                  builder: (context) {
-                                    if (_agoraReviewsLoading) {
-                                      return Row(
-                                        children: [
-                                          SizedBox(
-                                            width: 16,
-                                            height: 16,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              color: colorScheme.primary,
+                                                SnackBar(
+                                                  content: Text(
+                                                    wasFavorite
+                                                        ? '${_selectedPlace!.name} removed from favorites'
+                                                        : '${_selectedPlace!.name} added to favorites',
+                                                  ),
+                                                  duration: const Duration(
+                                                    seconds: 2,
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                            child: Container(
+                                              padding: const EdgeInsets.all(4),
+                                              decoration: BoxDecoration(
+                                                color: colorScheme.surface
+                                                    .withValues(alpha: 0.8),
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: Icon(
+                                                _favoritesManager.isFavorite(
+                                                      _selectedPlace!,
+                                                    )
+                                                    ? Icons.favorite
+                                                    : Icons.favorite_border,
+                                                size: 18,
+                                                color:
+                                                    _favoritesManager
+                                                        .isFavorite(
+                                                          _selectedPlace!,
+                                                        )
+                                                    ? Colors.red
+                                                    : colorScheme.onSurface,
+                                              ),
                                             ),
                                           ),
                                           const SizedBox(width: 8),
-                                          Text(
-                                            'Loading Agora reviews...',
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              color:
-                                                  colorScheme.onSurfaceVariant,
+                                          // Close button
+                                          GestureDetector(
+                                            onTap: () => setState(
+                                              () => _selectedPlace = null,
+                                            ),
+                                            child: Container(
+                                              padding: const EdgeInsets.all(4),
+                                              decoration: BoxDecoration(
+                                                color: colorScheme.surface
+                                                    .withValues(alpha: 0.8),
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: Icon(
+                                                Icons.close,
+                                                size: 18,
+                                                color: colorScheme.onSurface,
+                                              ),
                                             ),
                                           ),
                                         ],
-                                      );
-                                    } else if (_agoraReviewCount == null ||
-                                        _agoraReviewCount == 0) {
-                                      return Row(
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.all(12.0),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
                                         children: [
                                           Icon(
-                                            Icons.star_border,
-                                            size: 16,
-                                            color: colorScheme.onSurfaceVariant,
+                                            _selectedPlace!.type
+                                                    .toLowerCase()
+                                                    .contains('cafe')
+                                                ? Icons.local_cafe
+                                                : _selectedPlace!.type
+                                                      .toLowerCase()
+                                                      .contains('library')
+                                                ? Icons.menu_book
+                                                : _selectedPlace!.type
+                                                      .toLowerCase()
+                                                      .contains('coworking')
+                                                ? Icons.work
+                                                : Icons.location_on,
+                                            color: colorScheme.primary,
+                                            size: 20,
                                           ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            'No Agora reviews yet',
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              color:
-                                                  colorScheme.onSurfaceVariant,
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              _selectedPlace!.name,
+                                              style: TextStyle(
+                                                fontSize: 18,
+                                                fontWeight: FontWeight.w400,
+                                                color: colorScheme.onSurface,
+                                                fontFamily: 'Inter',
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
                                             ),
                                           ),
                                         ],
-                                      );
-                                    } else {
-                                      return Row(
+                                      ),
+                                      const SizedBox(height: 4),
+                                      // Google reviews row
+                                      Row(
                                         children: [
                                           Icon(
                                             Icons.star,
                                             size: 16,
-                                            color: colorScheme.primary,
+                                            color: colorScheme.onSurface,
                                           ),
                                           const SizedBox(width: 4),
                                           Text(
-                                            '${_agoraAvgRating != null ? _agoraAvgRating!.toStringAsFixed(1) : "N/A"} (Agora, $_agoraReviewCount review${_agoraReviewCount == 1 ? '' : 's'})',
+                                            '${_selectedPlace!.rating != null ? _selectedPlace!.rating!.toStringAsFixed(1) : "N/A"} (Google, ${_selectedPlace!.userRatingsTotal ?? 0} reviews)',
                                             style: TextStyle(
                                               fontSize: 14,
                                               fontWeight: FontWeight.w600,
-                                              color: colorScheme.primary,
+                                              color: colorScheme.onSurface,
                                               fontFamily: 'Inter',
                                             ),
                                           ),
                                         ],
-                                      );
-                                    }
-                                  },
-                                ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  'View Details',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
-                                    color: colorScheme.primary,
-                                    fontFamily: 'Roboto',
-                                    decoration: TextDecoration.underline,
+                                      ),
+                                      // Agora reviews row
+                                      const SizedBox(height: 2),
+                                      Builder(
+                                        builder: (context) {
+                                          if (_agoraReviewsLoading) {
+                                            return Row(
+                                              children: [
+                                                SizedBox(
+                                                  width: 16,
+                                                  height: 16,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                        color:
+                                                            colorScheme.primary,
+                                                      ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Text(
+                                                  'Loading Agora reviews...',
+                                                  style: TextStyle(
+                                                    fontSize: 13,
+                                                    color: colorScheme
+                                                        .onSurfaceVariant,
+                                                  ),
+                                                ),
+                                              ],
+                                            );
+                                          } else if (_agoraReviewCount ==
+                                                  null ||
+                                              _agoraReviewCount == 0) {
+                                            return Row(
+                                              children: [
+                                                Icon(
+                                                  Icons.star_border,
+                                                  size: 16,
+                                                  color: colorScheme
+                                                      .onSurfaceVariant,
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  'No Agora reviews yet',
+                                                  style: TextStyle(
+                                                    fontSize: 13,
+                                                    color: colorScheme
+                                                        .onSurfaceVariant,
+                                                  ),
+                                                ),
+                                              ],
+                                            );
+                                          } else {
+                                            return Row(
+                                              children: [
+                                                Icon(
+                                                  Icons.star,
+                                                  size: 16,
+                                                  color: colorScheme.primary,
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  '${_agoraAvgRating != null ? _agoraAvgRating!.toStringAsFixed(1) : "N/A"} (Agora, $_agoraReviewCount review${_agoraReviewCount == 1 ? '' : 's'})',
+                                                  style: TextStyle(
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: colorScheme.primary,
+                                                    fontFamily: 'Inter',
+                                                  ),
+                                                ),
+                                              ],
+                                            );
+                                          }
+                                        },
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        'View Details',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w500,
+                                          color: colorScheme.primary,
+                                          fontFamily: 'Roboto',
+                                          decoration: TextDecoration.underline,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
-                ),
-              ),
             ),
           ),
 
@@ -1610,7 +1707,10 @@ class _MyHomePageState extends State<MyHomePage> {
                       });
                     },
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 10,
+                      ),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           begin: Alignment.topLeft,

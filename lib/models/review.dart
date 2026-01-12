@@ -47,16 +47,24 @@ class Review {
   factory Review.fromFirestore(Map<String, dynamic> data, String id) {
     final hasUserId = data.containsKey('userId') && data['userId'] != null;
     final hasUserName = data.containsKey('userName') && data['userName'] != null;
+    
+    final created = data['createdAt'];
+    final createdDate = created is DateTime
+        ? created
+        : created?.toDate != null
+            ? created.toDate() as DateTime
+            : DateTime.now();
+
     return Review(
       id: id,
       userId: hasUserId ? data['userId'] as String : null,
       userName: hasUserName ? data['userName'] as String : null,
-      placeId: data['placeId'] as String,
-      placeName: data['placeName'] as String,
-      rating: data['rating'] as int,
-      outlets: data['outlets'] as String,
-      reviewText: data['reviewText'] as String,
-      createdAt: (data['createdAt'] as dynamic).toDate(),
+      placeId: data['placeId'] as String? ?? '',
+      placeName: data['placeName'] as String? ?? 'Unknown place',
+      rating: data['rating'] as int? ?? 0,
+      outlets: data['outlets'] as String? ?? '',
+      reviewText: data['reviewText'] as String? ?? '',
+      createdAt: createdDate,
       photoReference: data['photoReference'] as String?,
       wifiQuality: data['wifiQuality'] as int?,
       outletAvailability: data['outletAvailability'] as int?,

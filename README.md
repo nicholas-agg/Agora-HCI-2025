@@ -1,16 +1,20 @@
-# Agora
+# Agora – Οδηγός Εγκατάστασης και Χρήσης
 
-An application with the aim to crowdsource information about studying places in Athens.
+Εφαρμογή για ανεύρεση και αξιολόγηση χώρων μελέτης στην Αθήνα, με χάρτη, check-in, reviews και favorites.
 
-## Getting Started
+## Α. Οδηγίες για έναν τελείως άπειρο χρήστη (κατέβασμα & εγκατάσταση στο κινητό)
 
-This project is a starting point for a Flutter application.
+1. Σου δίνουμε το αρχείο εγκατάστασης (APK) της εφαρμογής. Αποθήκευσέ το στο κινητό σου (ή στείλ’ το με email/USB και άνοιξέ το από εκεί).
+2. Πάτα στο APK. Αν το κινητό ρωτήσει για άδεια «Εγκατάσταση από άγνωστες πηγές», επίλεξε Ενεργοποίηση/Allow για αυτή τη μία φορά.
+3. Πάτα Εγκατάσταση. Μόλις ολοκληρωθεί, πάτα Άνοιγμα ή βρες το εικονίδιο «Agora» στην αρχική οθόνη.
+4. Άνοιξε την εφαρμογή:
+	- Συνδέσου με email/κωδικό ή δημιούργησε νέο λογαριασμό (θα σου ζητήσει επιβεβαίωση email).
+	- Δώσε άδεια τοποθεσίας για να βλέπεις κοντινούς χώρους και να κάνεις check-in.
+	- Στον χάρτη βρίσκεις χώρους μελέτης, μπορείς να κάνεις check-in, να τους αποθηκεύεις στα αγαπημένα και να γράφεις/διαβάζεις αξιολογήσεις.
 
-A few resources to get you started if this is your first Flutter project:
+Σημείωση: Δεν χρειάζεται να εγκαταστήσεις τίποτα άλλο ή να ρυθμίσεις κλειδιά. Απλώς εγκαθιστάς το APK που σου δίνουμε.
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+## Β. Πληροφορίες συμβατότητας / APK
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+- Υποστηρίζονται σύγχρονες Android συσκευές (Android 7.0/SDK 24 και πάνω) με Google Play Services ενεργά.
+- Το παρεχόμενο APK λειτουργεί σε συσκευές με Google Play (Google APIs). Αν θέλεις να το δημιουργήσεις μόνος σου από τον κώδικα, μπορείς με `flutter build apk`, αλλά για απλό χρήστη αρκεί το έτοιμο APK που συνοδεύει την εφαρμογή.

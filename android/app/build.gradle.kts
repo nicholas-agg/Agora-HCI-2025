@@ -19,7 +19,7 @@ if (envFile.exists()) {
 val mapsApiKey = env.getProperty("GOOGLE_MAPS_API_KEY") ?: System.getenv("GOOGLE_MAPS_API_KEY") ?: "YOUR_API_KEY_HERE"
 
 android {
-    namespace = "com.example.agora"
+    namespace = "com.agora.gr"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -56,6 +56,13 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+
+    applicationVariants.all {
+        outputs.all {
+            val output = this as com.android.build.gradle.internal.api.BaseVariantOutputImpl
+            output.outputFileName = "agora-${buildType.name}.apk"
         }
     }
 }

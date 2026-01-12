@@ -23,6 +23,12 @@ class _MainNavigationState extends State<MainNavigation> {
 
   late List<Widget> _pages;
 
+  void _goHome() {
+    setState(() {
+      _currentIndex = 0;
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -32,7 +38,7 @@ class _MainNavigationState extends State<MainNavigation> {
         username: widget.username,
       ),
       FavoritesPage(onLogout: widget.onLogout),
-      ProfilePage(key: _profilePageKey, onSignOut: widget.onLogout),
+      ProfilePage(key: _profilePageKey, onSignOut: widget.onLogout, onBackToHome: _goHome),
     ];
   }
 
