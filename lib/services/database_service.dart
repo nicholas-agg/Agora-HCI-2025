@@ -5,8 +5,8 @@ import '../models/check_in.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class DatabaseService {
-    // (No longer needed) Update all reviews for a user with a new userName
-    // Future<void> updateUserNameInReviews(String userId, String newUserName) async {}
+  // (No longer needed) Update all reviews for a user with a new userName
+  // Future<void> updateUserNameInReviews(String userId, String newUserName) async {}
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   // Helper method to handle Firestore errors
@@ -73,22 +73,19 @@ class DatabaseService {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
-        return StudyPlace(
-          data['placeName'] as String,
-          LatLng(
-            data['latitude'] as double,
-            data['longitude'] as double,
-          ),
-          data['placeType'] as String,
-          photoReference: data['photoReference'] as String?,
-          placeId: data['placeId'] as String?,
-          rating: data['rating'] as double?,
-          userRatingsTotal: data['userRatingsTotal'] as int?,
-        );
-      }).toList();
-    });
+          return snapshot.docs.map((doc) {
+            final data = doc.data();
+            return StudyPlace(
+              data['placeName'] as String,
+              LatLng(data['latitude'] as double, data['longitude'] as double),
+              data['placeType'] as String,
+              photoReference: data['photoReference'] as String?,
+              placeId: data['placeId'] as String?,
+              rating: data['rating'] as double?,
+              userRatingsTotal: data['userRatingsTotal'] as int?,
+            );
+          }).toList();
+        });
   }
 
   // Check if a place is in user's favorites
@@ -148,12 +145,14 @@ class DatabaseService {
         'reviewText': reviewText,
         'createdAt': FieldValue.serverTimestamp(),
         if (wifiQuality != null) 'wifiQuality': wifiQuality,
-        if (outletAvailability != null) 'outletAvailability': outletAvailability,
+        if (outletAvailability != null)
+          'outletAvailability': outletAvailability,
         if (averagePrice != null) 'averagePrice': averagePrice,
         if (noiseLevel != null) 'noiseLevel': noiseLevel,
         if (comfortLevel != null) 'comfortLevel': comfortLevel,
         if (aestheticRating != null) 'aestheticRating': aestheticRating,
-        if (userPhotos != null && userPhotos.isNotEmpty) 'userPhotos': userPhotos,
+        if (userPhotos != null && userPhotos.isNotEmpty)
+          'userPhotos': userPhotos,
       };
 
       await _firestore.collection('reviews').add(review);
@@ -170,10 +169,10 @@ class DatabaseService {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        return Review.fromFirestore(doc.data(), doc.id);
-      }).toList();
-    });
+          return snapshot.docs.map((doc) {
+            return Review.fromFirestore(doc.data(), doc.id);
+          }).toList();
+        });
   }
 
   // Get all reviews by a specific user
@@ -183,13 +182,13 @@ class DatabaseService {
         .where('userId', isEqualTo: userId)
         .snapshots()
         .map((snapshot) {
-      final reviews = snapshot.docs.map((doc) {
-        return Review.fromFirestore(doc.data(), doc.id);
-      }).toList();
+          final reviews = snapshot.docs.map((doc) {
+            return Review.fromFirestore(doc.data(), doc.id);
+          }).toList();
 
-      reviews.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      return reviews;
-    });
+          reviews.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return reviews;
+        });
   }
 
   // Get review count for a user
@@ -225,16 +224,18 @@ class DatabaseService {
         'outlets': outlets,
         'reviewText': reviewText,
       };
-      
+
       // Add optional fields only if provided
       if (wifiQuality != null) updateData['wifiQuality'] = wifiQuality;
-      if (outletAvailability != null) updateData['outletAvailability'] = outletAvailability;
+      if (outletAvailability != null)
+        updateData['outletAvailability'] = outletAvailability;
       if (averagePrice != null) updateData['averagePrice'] = averagePrice;
       if (noiseLevel != null) updateData['noiseLevel'] = noiseLevel;
       if (comfortLevel != null) updateData['comfortLevel'] = comfortLevel;
-      if (aestheticRating != null) updateData['aestheticRating'] = aestheticRating;
+      if (aestheticRating != null)
+        updateData['aestheticRating'] = aestheticRating;
       if (userPhotos != null) updateData['userPhotos'] = userPhotos;
-      
+
       await _firestore.collection('reviews').doc(reviewId).update(updateData);
     } catch (e) {
       throw Exception('Failed to update review: $e');
@@ -324,6 +325,78 @@ class DatabaseService {
     }
   }
 
+  /// Returns the user's active check-in at ANY place, or null if none
+  Future<CheckIn?> getUserActiveCheckInAnyPlace({
+    required String userId,
+  }) async {
+    try {
+      final now = Timestamp.fromDate(DateTime.now());
+      final query = await _firestore
+          .collection('checkins')
+          .where('userId', isEqualTo: userId)
+          .where('expiresAt', isGreaterThan: now)
+          .orderBy('expiresAt', descending: true)
+          .limit(1)
+          .get();
+      if (query.docs.isNotEmpty) {
+        return CheckIn.fromDoc(query.docs.first);
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Stream the user's active check-in (any place). Emits null if none.
+  Stream<CheckIn?> userActiveCheckInStream({required String userId}) {
+    final now = Timestamp.fromDate(DateTime.now());
+    return _firestore
+        .collection('checkins')
+        .where('userId', isEqualTo: userId)
+        .where('expiresAt', isGreaterThan: now)
+        .orderBy('expiresAt', descending: true)
+        .limit(1)
+        .snapshots()
+        .map((snapshot) {
+          if (snapshot.docs.isNotEmpty) {
+            return CheckIn.fromDoc(snapshot.docs.first);
+          }
+          return null;
+        });
+  }
+
+  /// Cancel (delete) the user's active check-in. If placeId is provided, only cancel at that place.
+  Future<void> cancelActiveCheckIn({
+    required String userId,
+    String? placeId,
+  }) async {
+    try {
+      final now = Timestamp.fromDate(DateTime.now());
+      Query<Map<String, dynamic>> q = _firestore
+          .collection('checkins')
+          .where('userId', isEqualTo: userId)
+          .where('expiresAt', isGreaterThan: now);
+      if (placeId != null) {
+        q = q.where('placeId', isEqualTo: placeId);
+      }
+      final res = await q.limit(1).get();
+      if (res.docs.isNotEmpty) {
+        await _firestore.collection('checkins').doc(res.docs.first.id).delete();
+      }
+    } catch (e) {
+      throw Exception(_handleFirestoreError(e));
+    }
+  }
+
+  /// Cancel an active check-in by its document ID
+  Future<void> cancelCheckInById(String checkInId) async {
+    try {
+      await _firestore.collection('checkins').doc(checkInId).delete();
+    } catch (e) {
+      throw Exception(_handleFirestoreError(e));
+    }
+  }
+
   Future<bool> isCheckedIn({
     required String userId,
     required String placeId,
@@ -352,10 +425,12 @@ class DatabaseService {
         .limit(limit)
         .snapshots()
         .map((snapshot) {
-      final checkIns = snapshot.docs.map((doc) => CheckIn.fromDoc(doc)).toList();
-      checkIns.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      return checkIns;
-    });
+          final checkIns = snapshot.docs
+              .map((doc) => CheckIn.fromDoc(doc))
+              .toList();
+          checkIns.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return checkIns;
+        });
   }
 
   Future<int> getUserCheckInCount(String userId) async {
@@ -386,14 +461,14 @@ class DatabaseService {
       for (var doc in snapshot.docs) {
         final rating = doc.data()['rating'] as int;
         final userId = doc.data()['userId'] as String;
-        
+
         // Get user points for weighting
         final userDoc = await _firestore.collection('users').doc(userId).get();
         final userPoints = userDoc.data()?['points'] as int? ?? 0;
-        
+
         // Calculate weight: 1.0 + (points/1000), capped at 1.5x
         final weight = (1.0 + (userPoints / 1000)).clamp(1.0, 1.5);
-        
+
         totalWeightedRating += rating * weight;
         totalWeight += weight;
       }
@@ -422,12 +497,20 @@ class DatabaseService {
         };
       }
 
-      double wifiSum = 0, outletSum = 0, noiseSum = 0, comfortSum = 0, aestheticSum = 0;
-      int wifiCount = 0, outletCount = 0, noiseCount = 0, comfortCount = 0, aestheticCount = 0;
+      double wifiSum = 0,
+          outletSum = 0,
+          noiseSum = 0,
+          comfortSum = 0,
+          aestheticSum = 0;
+      int wifiCount = 0,
+          outletCount = 0,
+          noiseCount = 0,
+          comfortCount = 0,
+          aestheticCount = 0;
 
       for (var doc in snapshot.docs) {
         final data = doc.data();
-        
+
         if (data['wifiQuality'] != null) {
           wifiSum += (data['wifiQuality'] as int).toDouble();
           wifiCount++;
@@ -455,7 +538,9 @@ class DatabaseService {
         'outletAvailability': outletCount > 0 ? outletSum / outletCount : null,
         'noiseLevel': noiseCount > 0 ? noiseSum / noiseCount : null,
         'comfortLevel': comfortCount > 0 ? comfortSum / comfortCount : null,
-        'aestheticRating': aestheticCount > 0 ? aestheticSum / aestheticCount : null,
+        'aestheticRating': aestheticCount > 0
+            ? aestheticSum / aestheticCount
+            : null,
       };
     } catch (e) {
       return {
@@ -489,6 +574,4 @@ class DatabaseService {
       return [];
     }
   }
-
-
 }

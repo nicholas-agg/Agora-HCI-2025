@@ -22,25 +22,25 @@ import 'package:flutter_image_compress/flutter_image_compress.dart';
 
 class PlaceDetailsPage extends StatefulWidget {
   final StudyPlace place;
-  
+
   const PlaceDetailsPage({super.key, required this.place});
 
   @override
   State<PlaceDetailsPage> createState() => _PlaceDetailsPageState();
 }
 
-
 class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
-    String _formatDuration(Duration duration) {
-      final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
-      final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
-      final hours = duration.inHours;
-      if (hours > 0) {
-        return '$hours:$minutes:$seconds';
-      } else {
-        return '$minutes:$seconds';
-      }
+  String _formatDuration(Duration duration) {
+    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+    final hours = duration.inHours;
+    if (hours > 0) {
+      return '$hours:$minutes:$seconds';
+    } else {
+      return '$minutes:$seconds';
     }
+  }
+
   final ScrollController _scrollController = ScrollController();
   final FavoritesManager _favoritesManager = FavoritesManager();
 
@@ -51,270 +51,333 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
   Timer? _checkInTimer;
   Duration? _checkInTimeLeft;
 
-    // For editing review
-    int _editRating = 0;
-    String _editOutlets = 'None';
-    final TextEditingController _editReviewController = TextEditingController();
-    final TextEditingController _editPriceController = TextEditingController();
-    int _editWifiQuality = 0;
-    int _editComfortLevel = 0;
-    int _editAestheticRating = 0;
-    double? _editNoiseLevel;
-    List<String> _editPhotoBase64List = [];
+  // For editing review
+  int _editRating = 0;
+  String _editOutlets = 'None';
+  final TextEditingController _editReviewController = TextEditingController();
+  final TextEditingController _editPriceController = TextEditingController();
+  int _editWifiQuality = 0;
+  int _editComfortLevel = 0;
+  int _editAestheticRating = 0;
+  double? _editNoiseLevel;
+  List<String> _editPhotoBase64List = [];
 
+  void _showEditReviewDialog(Review review) {
+    _editRating = review.rating;
+    _editOutlets = review.outlets;
+    _editReviewController.text = review.reviewText;
+    _editPriceController.text = review.averagePrice ?? '';
+    _editWifiQuality = review.wifiQuality ?? 0;
+    _editComfortLevel = review.comfortLevel ?? 0;
+    _editAestheticRating = review.aestheticRating ?? 0;
+    _editNoiseLevel = review.noiseLevel;
+    _editPhotoBase64List = List.from(review.userPhotos ?? []);
 
-    void _showEditReviewDialog(Review review) {
-      _editRating = review.rating;
-      _editOutlets = review.outlets;
-      _editReviewController.text = review.reviewText;
-      _editPriceController.text = review.averagePrice ?? '';
-      _editWifiQuality = review.wifiQuality ?? 0;
-      _editComfortLevel = review.comfortLevel ?? 0;
-      _editAestheticRating = review.aestheticRating ?? 0;
-      _editNoiseLevel = review.noiseLevel;
-      _editPhotoBase64List = List.from(review.userPhotos ?? []);
-      
-      if (!mounted) return;
-      showDialog(
-        context: context,
-        builder: (dialogContext) {
-          return StatefulBuilder(
-            builder: (context, setDialogState) {
-              final colorScheme = Theme.of(context).colorScheme;
-              return AlertDialog(
-                title: const Text('Edit Review'),
-                content: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Rating'),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: List.generate(5, (index) {
-                            return IconButton(
-                              icon: Icon(
-                                index < _editRating ? Icons.star : Icons.star_border,
-                                color: colorScheme.primary,
-                              ),
-                              onPressed: () {
-                                setDialogState(() {
-                                  _editRating = index + 1;
-                                });
-                              },
-                            );
-                          }),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      const Text('Power outlets'),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          ChoiceChip(
-                            label: const Text('None'),
-                            selected: _editOutlets == 'None',
-                            onSelected: (_) {
-                              setDialogState(() {
-                                _editOutlets = 'None';
-                              });
-                            },
-                          ),
-                          ChoiceChip(
-                            label: const Text('Few'),
-                            selected: _editOutlets == 'Few',
-                            onSelected: (_) {
-                              setDialogState(() {
-                                _editOutlets = 'Few';
-                              });
-                            },
-                          ),
-                          ChoiceChip(
-                            label: const Text('A lot'),
-                            selected: _editOutlets == 'A lot',
-                            onSelected: (_) {
-                              setDialogState(() {
-                                _editOutlets = 'A lot';
-                              });
-                            },
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: _editReviewController,
-                        maxLines: 5,
-                        decoration: const InputDecoration(
-                          hintText: 'Edit your review',
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      const Divider(),
-                      const SizedBox(height: 8),
-                      const Text('Optional Details', style: TextStyle(fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 12),
-                      _buildEditSlider('Wi-Fi Quality', Icons.wifi, _editWifiQuality, (val) {
-                        setDialogState(() => _editWifiQuality = val.round());
-                      }, colorScheme),
-                      const SizedBox(height: 8),
-                      // Removed: Outlets star slider (now using None/Few/A lot system)
-                      const SizedBox(height: 8),
-                      _buildEditSlider('Comfort', Icons.chair, _editComfortLevel, (val) {
-                        setDialogState(() => _editComfortLevel = val.round());
-                      }, colorScheme),
-                      const SizedBox(height: 8),
-                      _buildEditSlider('Aesthetic', Icons.palette, _editAestheticRating, (val) {
-                        setDialogState(() => _editAestheticRating = val.round());
-                      }, colorScheme),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: _editPriceController,
-                        decoration: const InputDecoration(
-                          labelText: 'Average Price',
-                          hintText: 'e.g., €5',
-                          prefixIcon: Icon(Icons.euro),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      if (_editNoiseLevel != null)
-                        Text(
-                          'Noise Level: ${_editNoiseLevel!.toStringAsFixed(1)} dB (${NoiseService.getNoiseCategory(_editNoiseLevel!)})',
-                          style: TextStyle(fontSize: 14, color: colorScheme.onSurfaceVariant),
-                        ),
-                      if (_editPhotoBase64List.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        Text('Photos: ${_editPhotoBase64List.length}', style: const TextStyle(fontSize: 14)),
-                      ],
-                    ],
-                  ),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancel'),
-                  ),
-                  ElevatedButton(
-                    onPressed: () async {
-                      try {
-                        await _databaseService.updateReview(
-                          reviewId: review.id,
-                          rating: _editRating,
-                          outlets: _editOutlets,
-                          reviewText: _editReviewController.text.trim(),
-                          wifiQuality: _editWifiQuality > 0 ? _editWifiQuality : null,
-                          comfortLevel: _editComfortLevel > 0 ? _editComfortLevel : null,
-                          aestheticRating: _editAestheticRating > 0 ? _editAestheticRating : null,
-                          averagePrice: _editPriceController.text.trim().isNotEmpty ? _editPriceController.text.trim() : null,
-                          noiseLevel: _editNoiseLevel,
-                          userPhotos: _editPhotoBase64List.isNotEmpty ? _editPhotoBase64List : null,
-                        );
-                        if (!mounted || !context.mounted) return;
-                        Navigator.of(context).pop();
-                        // Refresh user review
-                        _checkIfUserReviewed();
-                        setState(() {
-                          // Refresh averages and photos since data has changed
-                          if (widget.place.placeId != null) {
-                            _photosFuture = _databaseService.getPlacePhotos(widget.place.placeId!);
-                            _attributeAveragesFuture = _databaseService.getPlaceAttributeAverages(widget.place.placeId!);
-                          }
-                        });
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Review updated!'), backgroundColor: Colors.green),
-                        );
-                      } catch (e) {
-                         if (!mounted || !context.mounted) return;
-                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Failed to update review: $e'), backgroundColor: Colors.red),
-                        );
-                      }
-                    },
-                    child: const Text('Save'),
-                  ),
-                ],
-              );
-            },
-          );
-        },
-      );
-    }
-
-    Widget _buildEditSlider(String label, IconData icon, int value, Function(double) onChanged, ColorScheme colorScheme) {
-      return Row(
-        children: [
-          Icon(icon, size: 20, color: colorScheme.primary),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: const TextStyle(fontSize: 14)),
-                Row(
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final colorScheme = Theme.of(context).colorScheme;
+            return AlertDialog(
+              title: const Text('Edit Review'),
+              content: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: GestureDetector(
-                        onVerticalDragStart: (_) {},
-                        child: Slider(
-                          value: value.toDouble(),
-                          min: 0,
-                          max: 5,
-                          divisions: 5,
-                          label: value == 0 ? 'Not set' : '$value',
-                          onChanged: onChanged,
-                        ),
+                    const Text('Rating'),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: List.generate(5, (index) {
+                          return IconButton(
+                            icon: Icon(
+                              index < _editRating
+                                  ? Icons.star
+                                  : Icons.star_border,
+                              color: colorScheme.primary,
+                            ),
+                            onPressed: () {
+                              setDialogState(() {
+                                _editRating = index + 1;
+                              });
+                            },
+                          );
+                        }),
                       ),
                     ),
-                    Text('$value', style: const TextStyle(fontSize: 14)),
+                    const SizedBox(height: 12),
+                    const Text('Power outlets'),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('None'),
+                          selected: _editOutlets == 'None',
+                          onSelected: (_) {
+                            setDialogState(() {
+                              _editOutlets = 'None';
+                            });
+                          },
+                        ),
+                        ChoiceChip(
+                          label: const Text('Few'),
+                          selected: _editOutlets == 'Few',
+                          onSelected: (_) {
+                            setDialogState(() {
+                              _editOutlets = 'Few';
+                            });
+                          },
+                        ),
+                        ChoiceChip(
+                          label: const Text('A lot'),
+                          selected: _editOutlets == 'A lot',
+                          onSelected: (_) {
+                            setDialogState(() {
+                              _editOutlets = 'A lot';
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _editReviewController,
+                      maxLines: 5,
+                      decoration: const InputDecoration(
+                        hintText: 'Edit your review',
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Divider(),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Optional Details',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildEditSlider(
+                      'Wi-Fi Quality',
+                      Icons.wifi,
+                      _editWifiQuality,
+                      (val) {
+                        setDialogState(() => _editWifiQuality = val.round());
+                      },
+                      colorScheme,
+                    ),
+                    const SizedBox(height: 8),
+                    // Removed: Outlets star slider (now using None/Few/A lot system)
+                    const SizedBox(height: 8),
+                    _buildEditSlider(
+                      'Comfort',
+                      Icons.chair,
+                      _editComfortLevel,
+                      (val) {
+                        setDialogState(() => _editComfortLevel = val.round());
+                      },
+                      colorScheme,
+                    ),
+                    const SizedBox(height: 8),
+                    _buildEditSlider(
+                      'Aesthetic',
+                      Icons.palette,
+                      _editAestheticRating,
+                      (val) {
+                        setDialogState(
+                          () => _editAestheticRating = val.round(),
+                        );
+                      },
+                      colorScheme,
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _editPriceController,
+                      decoration: const InputDecoration(
+                        labelText: 'Average Price',
+                        hintText: 'e.g., €5',
+                        prefixIcon: Icon(Icons.euro),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    if (_editNoiseLevel != null)
+                      Text(
+                        'Noise Level: ${_editNoiseLevel!.toStringAsFixed(1)} dB (${NoiseService.getNoiseCategory(_editNoiseLevel!)})',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    if (_editPhotoBase64List.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        'Photos: ${_editPhotoBase64List.length}',
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                    ],
                   ],
                 ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    try {
+                      await _databaseService.updateReview(
+                        reviewId: review.id,
+                        rating: _editRating,
+                        outlets: _editOutlets,
+                        reviewText: _editReviewController.text.trim(),
+                        wifiQuality: _editWifiQuality > 0
+                            ? _editWifiQuality
+                            : null,
+                        comfortLevel: _editComfortLevel > 0
+                            ? _editComfortLevel
+                            : null,
+                        aestheticRating: _editAestheticRating > 0
+                            ? _editAestheticRating
+                            : null,
+                        averagePrice:
+                            _editPriceController.text.trim().isNotEmpty
+                            ? _editPriceController.text.trim()
+                            : null,
+                        noiseLevel: _editNoiseLevel,
+                        userPhotos: _editPhotoBase64List.isNotEmpty
+                            ? _editPhotoBase64List
+                            : null,
+                      );
+                      if (!mounted || !context.mounted) return;
+                      Navigator.of(context).pop();
+                      // Refresh user review
+                      _checkIfUserReviewed();
+                      setState(() {
+                        // Refresh averages and photos since data has changed
+                        if (widget.place.placeId != null) {
+                          _photosFuture = _databaseService.getPlacePhotos(
+                            widget.place.placeId!,
+                          );
+                          _attributeAveragesFuture = _databaseService
+                              .getPlaceAttributeAverages(widget.place.placeId!);
+                        }
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Review updated!'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    } catch (e) {
+                      if (!mounted || !context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Failed to update review: $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  },
+                  child: const Text('Save'),
+                ),
               ],
-            ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildEditSlider(
+    String label,
+    IconData icon,
+    int value,
+    Function(double) onChanged,
+    ColorScheme colorScheme,
+  ) {
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: colorScheme.primary),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: const TextStyle(fontSize: 14)),
+              Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onVerticalDragStart: (_) {},
+                      child: Slider(
+                        value: value.toDouble(),
+                        min: 0,
+                        max: 5,
+                        divisions: 5,
+                        label: value == 0 ? 'Not set' : '$value',
+                        onChanged: onChanged,
+                      ),
+                    ),
+                  ),
+                  Text('$value', style: const TextStyle(fontSize: 14)),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _confirmDeleteReview(Review review) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete Review'),
+        content: const Text('Are you sure you want to delete your review?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.delete),
+            label: const Text('Delete'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              try {
+                await _databaseService.deleteReview(review.id);
+                if (!dialogContext.mounted) return;
+                Navigator.of(dialogContext).pop();
+                setState(() {
+                  _hasReviewed = false;
+                  _userReview = null;
+                });
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Review deleted'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              } catch (e) {
+                if (!dialogContext.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Failed to delete review: $e'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
           ),
         ],
-      );
-    }
+      ),
+    );
+  }
 
-    void _confirmDeleteReview(Review review) {
-      showDialog(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('Delete Review'),
-          content: const Text('Are you sure you want to delete your review?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.delete),
-              label: const Text('Delete'),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              onPressed: () async {
-                try {
-                  await _databaseService.deleteReview(review.id);
-                  if (!dialogContext.mounted) return;
-                  Navigator.of(dialogContext).pop();
-                  setState(() {
-                    _hasReviewed = false;
-                    _userReview = null;
-                  });
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Review deleted'), backgroundColor: Colors.red),
-                  );
-                } catch (e) {
-                   if (!dialogContext.mounted) return;
-                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed to delete review: $e'), backgroundColor: Colors.red),
-                  );
-                }
-              },
-            ),
-          ],
-        ),
-      );
-    }
   final TextEditingController _reviewController = TextEditingController();
   final TextEditingController _priceController = TextEditingController();
   final DatabaseService _databaseService = DatabaseService();
@@ -322,11 +385,11 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
   final NoiseService _noiseService = NoiseService();
   final ImagePicker _imagePicker = ImagePicker();
   final PointsService _pointsService = PointsService();
-  
+
   int _selectedRating = 0;
   String _selectedOutlets = 'None'; // None, Few, A lot
   bool _submittingReview = false;
-  
+
   // New enhanced review attributes
   int _wifiQuality = 0; // 0-5
   int _comfortLevel = 0; // 0-5
@@ -354,13 +417,15 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
   @override
   void initState() {
     super.initState();
-    _photosFuture = widget.place.placeId != null 
-        ? _databaseService.getPlacePhotos(widget.place.placeId!) 
+    _photosFuture = widget.place.placeId != null
+        ? _databaseService.getPlacePhotos(widget.place.placeId!)
         : Future.value([]);
-    _attributeAveragesFuture = widget.place.placeId != null 
-        ? _databaseService.getPlaceAttributeAverages(widget.place.placeId!) 
+    _attributeAveragesFuture = widget.place.placeId != null
+        ? _databaseService.getPlaceAttributeAverages(widget.place.placeId!)
         : Future.value({});
-    _reviewsStream = _databaseService.getPlaceReviews(widget.place.placeId ?? '');
+    _reviewsStream = _databaseService.getPlaceReviews(
+      widget.place.placeId ?? '',
+    );
     _activeCheckInCountStream = widget.place.placeId != null
         ? _databaseService.getActiveCheckInCount(widget.place.placeId!)
         : const Stream.empty();
@@ -384,7 +449,10 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
     final user = _authService.currentUser;
     final placeId = widget.place.placeId;
     if (user == null || placeId == null) return;
-    final checkIn = await _databaseService.getUserActiveCheckIn(userId: user.uid, placeId: placeId);
+    final checkIn = await _databaseService.getUserActiveCheckIn(
+      userId: user.uid,
+      placeId: placeId,
+    );
     if (!mounted) return;
     setState(() {
       _userActiveCheckIn = checkIn;
@@ -426,9 +494,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
     final user = _authService.currentUser;
     final placeId = widget.place.placeId;
     if (user == null || placeId == null) return;
-    final query = await _databaseService
-        .getPlaceReviews(placeId)
-        .first;
+    final query = await _databaseService.getPlaceReviews(placeId).first;
     Review? userReview;
     try {
       userReview = query.firstWhere((review) => review.userId == user.uid);
@@ -475,8 +541,11 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
       return;
     }
 
-    // Check for active check-in
-    final activeCheckIn = await _databaseService.getUserActiveCheckIn(userId: user.uid, placeId: placeId);
+    // Check for active check-in at this place
+    final activeCheckIn = await _databaseService.getUserActiveCheckIn(
+      userId: user.uid,
+      placeId: placeId,
+    );
     if (activeCheckIn != null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -490,23 +559,52 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
       return;
     }
 
+    // Enforce single active check-in globally (any place)
+    final anyActive = await _databaseService.getUserActiveCheckInAnyPlace(
+      userId: user.uid,
+    );
+    if (anyActive != null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Already checked in at ${anyActive.placeName}. Cancel to switch places.',
+          ),
+        ),
+      );
+      setState(() {
+        _checkedIn = true;
+        // Only set local _userActiveCheckIn if it's for this place
+        _userActiveCheckIn = anyActive.placeId == placeId ? anyActive : null;
+      });
+      _startCheckInTimer();
+      return;
+    }
+
     // Request location permission and fetch current location
     final locPermission = await Geolocator.requestPermission();
     if (locPermission == LocationPermission.denied ||
         locPermission == LocationPermission.deniedForever) {
       if (!mounted) return;
       setState(() {
-        _checkInError = 'Location permission is required for check-in proximity validation.';
+        _checkInError =
+            'Location permission is required for check-in proximity validation.';
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enable location permission to check in.')),
+        const SnackBar(
+          content: Text('Enable location permission to check in.'),
+        ),
       );
       return;
     }
 
     Position? position;
     try {
-      position = await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high));
+      position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
+      );
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -559,7 +657,10 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
       // Refresh active check-in state
       _checkUserActiveCheckIn();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Checked in successfully!'), backgroundColor: Colors.green),
+        const SnackBar(
+          content: Text('Checked in successfully!'),
+          backgroundColor: Colors.green,
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -570,12 +671,44 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
     }
   }
 
+  Future<void> _cancelCheckIn() async {
+    final user = _authService.currentUser;
+    final placeId = widget.place.placeId;
+    if (user == null || placeId == null) return;
+    try {
+      await _databaseService.cancelActiveCheckIn(
+        userId: user.uid,
+        placeId: placeId,
+      );
+      if (!mounted) return;
+      setState(() {
+        _checkedIn = false;
+        _userActiveCheckIn = null;
+        _checkInTimeLeft = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Check-in cancelled'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to cancel: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   // Pick and compress photo to base64 (always downsize/compress on device)
   Future<void> _pickPhoto() async {
     if (_photoBase64List.length >= 3) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Maximum 3 photos allowed')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Maximum 3 photos allowed')));
       return;
     }
 
@@ -621,7 +754,11 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
       if (base64String == null) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Image could not be compressed enough. Please try a different photo.')),
+          const SnackBar(
+            content: Text(
+              'Image could not be compressed enough. Please try a different photo.',
+            ),
+          ),
         );
         setState(() {
           _isPickingPhoto = false;
@@ -636,16 +773,20 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Photo added (${ImageService.estimateSizeKB(base64String).toStringAsFixed(0)} KB)')),
+        SnackBar(
+          content: Text(
+            'Photo added (${ImageService.estimateSizeKB(base64String).toStringAsFixed(0)} KB)',
+          ),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isPickingPhoto = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to pick photo: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to pick photo: $e')));
     }
   }
 
@@ -656,14 +797,18 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
     if (!micStatus.isGranted) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Microphone permission is required to measure noise level.')),
+        const SnackBar(
+          content: Text(
+            'Microphone permission is required to measure noise level.',
+          ),
+        ),
       );
       return;
     }
 
     try {
       if (!mounted) return;
-      
+
       // Show dialog with countdown
       showDialog(
         context: context,
@@ -692,25 +837,29 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
       final noiseLevel = await _noiseService.measureAverage(
         duration: const Duration(seconds: 10),
       );
-      
+
       if (!mounted) return;
       Navigator.of(context).pop(); // Close dialog
-      
+
       if (noiseLevel != null) {
         setState(() {
           _measuredNoiseLevel = noiseLevel;
         });
-        
+
         final category = NoiseService.getNoiseCategory(noiseLevel);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Noise measured: ${noiseLevel.toStringAsFixed(1)} dB ($category)'),
+            content: Text(
+              'Noise measured: ${noiseLevel.toStringAsFixed(1)} dB ($category)',
+            ),
             backgroundColor: Colors.green,
           ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to measure noise. No readings captured.')),
+          const SnackBar(
+            content: Text('Failed to measure noise. No readings captured.'),
+          ),
         );
       }
     } catch (e) {
@@ -718,15 +867,15 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
       if (Navigator.of(context).canPop()) {
         Navigator.of(context).pop(); // Close dialog if open
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error measuring noise: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error measuring noise: $e')));
     }
   }
 
   Future<void> _submitReview() async {
     final user = _authService.currentUser;
-    
+
     if (user == null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -737,17 +886,17 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
 
     if (_selectedRating == 0) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a rating')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please select a rating')));
       return;
     }
 
     if (_reviewController.text.trim().isEmpty) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please write a review')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please write a review')));
       return;
     }
 
@@ -757,7 +906,8 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
 
     try {
       // Check if all detailed attributes are filled
-        final hasAllAttributes = _wifiQuality > 0 &&
+      final hasAllAttributes =
+          _wifiQuality > 0 &&
           _comfortLevel > 0 &&
           _aestheticRating > 0 &&
           _priceController.text.trim().isNotEmpty;
@@ -770,7 +920,9 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
         outlets: _selectedOutlets,
         reviewText: _reviewController.text.trim(),
         wifiQuality: _wifiQuality > 0 ? _wifiQuality : null,
-        averagePrice: _priceController.text.trim().isNotEmpty ? _priceController.text.trim() : null,
+        averagePrice: _priceController.text.trim().isNotEmpty
+            ? _priceController.text.trim()
+            : null,
         noiseLevel: _measuredNoiseLevel,
         comfortLevel: _comfortLevel > 0 ? _comfortLevel : null,
         aestheticRating: _aestheticRating > 0 ? _aestheticRating : null,
@@ -786,7 +938,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
       );
 
       if (!mounted) return;
-      
+
       // Clear the form
       _reviewController.clear();
       _priceController.clear();
@@ -799,11 +951,15 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
         _measuredNoiseLevel = null;
         _photoBase64List = [];
         _submittingReview = false;
-        
+
         // Refresh averages and photos since data has changed
         if (widget.place.placeId != null) {
-          _photosFuture = _databaseService.getPlacePhotos(widget.place.placeId!);
-          _attributeAveragesFuture = _databaseService.getPlaceAttributeAverages(widget.place.placeId!);
+          _photosFuture = _databaseService.getPlacePhotos(
+            widget.place.placeId!,
+          );
+          _attributeAveragesFuture = _databaseService.getPlaceAttributeAverages(
+            widget.place.placeId!,
+          );
         }
       });
 
@@ -824,7 +980,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
       setState(() {
         _submittingReview = false;
       });
-      
+
       String errorMessage = 'Failed to submit review';
       if (e.toString().contains('permission-denied')) {
         errorMessage = 'Access denied. Please sign in again.';
@@ -833,7 +989,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
       } else if (e.toString().contains('An error occurred')) {
         errorMessage = e.toString().replaceAll('Exception: ', '');
       }
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(errorMessage),
@@ -860,7 +1016,10 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(_getCategoryIcon(widget.place.type), color: colorScheme.primary),
+            Icon(
+              _getCategoryIcon(widget.place.type),
+              color: colorScheme.primary,
+            ),
             const SizedBox(width: 8),
             Flexible(
               child: Text(
@@ -880,7 +1039,9 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
           IconButton(
             icon: Icon(
               isFavorite ? Icons.favorite : Icons.favorite_border,
-              color: isFavorite ? colorScheme.primary : colorScheme.onSurfaceVariant,
+              color: isFavorite
+                  ? colorScheme.primary
+                  : colorScheme.onSurfaceVariant,
             ),
             tooltip: isFavorite ? 'Unfavorite' : 'Favorite',
             onPressed: () async {
@@ -890,7 +1051,11 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
               setState(() {});
               ScaffoldMessenger.of(messengerContext).showSnackBar(
                 SnackBar(
-                  content: Text(isFavorite ? 'Removed from favorites' : 'Added to favorites'),
+                  content: Text(
+                    isFavorite
+                        ? 'Removed from favorites'
+                        : 'Added to favorites',
+                  ),
                   backgroundColor: isFavorite ? Colors.red : Colors.green,
                 ),
               );
@@ -952,7 +1117,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                     ),
                   ),
                 ),
-              
+
               const SizedBox(height: 24),
 
               // User Photos Gallery (if available)
@@ -985,9 +1150,12 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                             scrollDirection: Axis.horizontal,
                             itemCount: photos.length,
                             itemBuilder: (context, index) {
-                              final imageBytes = ImageService.decodeBase64(photos[index]);
-                              if (imageBytes == null) return const SizedBox.shrink();
-                              
+                              final imageBytes = ImageService.decodeBase64(
+                                photos[index],
+                              );
+                              if (imageBytes == null)
+                                return const SizedBox.shrink();
+
                               return Padding(
                                 padding: const EdgeInsets.only(right: 8),
                                 child: GestureDetector(
@@ -1003,17 +1171,27 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                                             Align(
                                               alignment: Alignment.topRight,
                                               child: IconButton(
-                                                icon: Icon(Icons.close, color: Colors.white),
-                                                onPressed: () => Navigator.of(context).pop(),
+                                                icon: Icon(
+                                                  Icons.close,
+                                                  color: Colors.white,
+                                                ),
+                                                onPressed: () =>
+                                                    Navigator.of(context).pop(),
                                               ),
                                             ),
                                             Expanded(
                                               child: PageView.builder(
-                                                controller: PageController(initialPage: index),
+                                                controller: PageController(
+                                                  initialPage: index,
+                                                ),
                                                 itemCount: photos.length,
                                                 itemBuilder: (context, pageIndex) {
-                                                  final bytes = ImageService.decodeBase64(photos[pageIndex]);
-                                                  if (bytes == null) return const SizedBox.shrink();
+                                                  final bytes =
+                                                      ImageService.decodeBase64(
+                                                        photos[pageIndex],
+                                                      );
+                                                  if (bytes == null)
+                                                    return const SizedBox.shrink();
                                                   return InteractiveViewer(
                                                     child: Center(
                                                       child: Image.memory(
@@ -1029,7 +1207,9 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                                               padding: const EdgeInsets.all(16),
                                               child: Text(
                                                 '${index + 1} / ${photos.length}',
-                                                style: TextStyle(color: Colors.white),
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                ),
                                               ),
                                             ),
                                           ],
@@ -1065,7 +1245,11 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                       padding: const EdgeInsets.only(bottom: 4.0),
                       child: Row(
                         children: [
-                          Icon(Icons.star, size: 18, color: colorScheme.onSurface),
+                          Icon(
+                            Icons.star,
+                            size: 18,
+                            color: colorScheme.onSurface,
+                          ),
                           const SizedBox(width: 8),
                           Text(
                             '${widget.place.rating!.toStringAsFixed(1)} (Google, ${widget.place.userRatingsTotal ?? 0} reviews)',
@@ -1089,7 +1273,11 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                       if (reviews.isEmpty) {
                         return Row(
                           children: [
-                            Icon(Icons.star_border, size: 18, color: colorScheme.onSurfaceVariant),
+                            Icon(
+                              Icons.star_border,
+                              size: 18,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
                             const SizedBox(width: 8),
                             Text(
                               'No Agora reviews yet',
@@ -1102,10 +1290,16 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                           ],
                         );
                       }
-                      final avg = reviews.fold<double>(0, (sum, r) => sum + r.rating) / reviews.length;
+                      final avg =
+                          reviews.fold<double>(0, (sum, r) => sum + r.rating) /
+                          reviews.length;
                       return Row(
                         children: [
-                          Icon(Icons.star, size: 18, color: colorScheme.primary),
+                          Icon(
+                            Icons.star,
+                            size: 18,
+                            color: colorScheme.primary,
+                          ),
                           const SizedBox(width: 8),
                           Text(
                             '${avg.toStringAsFixed(1)} (Agora, ${reviews.length} reviews)',
@@ -1124,7 +1318,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
               ),
 
               const SizedBox(height: 32),
-              
+
               // Rating Section
               TweenAnimationBuilder<double>(
                 duration: const Duration(milliseconds: 600),
@@ -1163,7 +1357,9 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                             transform: Matrix4.identity()
                               ..scale(index < _selectedRating ? 1.1 : 1.0),
                             child: Icon(
-                              index < _selectedRating ? Icons.star : Icons.star_border,
+                              index < _selectedRating
+                                  ? Icons.star
+                                  : Icons.star_border,
                               size: 40,
                               color: colorScheme.primary,
                             ),
@@ -1174,9 +1370,9 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                   ],
                 ),
               ),
-              
+
               const SizedBox(height: 32),
-              
+
               // Place Attributes Section (if data exists)
               if (widget.place.placeId != null)
                 FutureBuilder<Map<String, dynamic>>(
@@ -1186,7 +1382,9 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                       return const SizedBox.shrink();
                     }
                     final attrs = snapshot.data;
-                    if (attrs == null || attrs.isEmpty || attrs.values.every((v) => v == null)) {
+                    if (attrs == null ||
+                        attrs.isEmpty ||
+                        attrs.values.every((v) => v == null)) {
                       return const SizedBox.shrink();
                     }
                     return Column(
@@ -1233,7 +1431,9 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                                   ),
                                 if (attrs['noiseLevel'] != null)
                                   Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 8),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 8,
+                                    ),
                                     child: Row(
                                       children: [
                                         TweenAnimationBuilder<double>(
@@ -1242,7 +1442,8 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                                           builder: (context, value, child) {
                                             return Icon(
                                               Icons.volume_up,
-                                              color: colorScheme.primary.withValues(alpha: value),
+                                              color: colorScheme.primary
+                                                  .withValues(alpha: value),
                                             );
                                           },
                                         ),
@@ -1269,10 +1470,15 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                                   ),
                                 if (attrs['averagePrice'] != null)
                                   Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 8),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 8,
+                                    ),
                                     child: Row(
                                       children: [
-                                        Icon(Icons.euro, color: colorScheme.primary),
+                                        Icon(
+                                          Icons.euro,
+                                          color: colorScheme.primary,
+                                        ),
                                         const SizedBox(width: 12),
                                         Expanded(
                                           child: Text(
@@ -1342,14 +1548,22 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
-                                  icon: const Icon(Icons.edit, color: Colors.blue),
+                                  icon: const Icon(
+                                    Icons.edit,
+                                    color: Colors.blue,
+                                  ),
                                   tooltip: 'Edit',
-                                  onPressed: () => _showEditReviewDialog(_userReview!),
+                                  onPressed: () =>
+                                      _showEditReviewDialog(_userReview!),
                                 ),
                                 IconButton(
-                                  icon: const Icon(Icons.delete, color: Colors.red),
+                                  icon: const Icon(
+                                    Icons.delete,
+                                    color: Colors.red,
+                                  ),
                                   tooltip: 'Delete',
-                                  onPressed: () => _confirmDeleteReview(_userReview!),
+                                  onPressed: () =>
+                                      _confirmDeleteReview(_userReview!),
                                 ),
                               ],
                             ),
@@ -1358,9 +1572,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                         const SizedBox(height: 8),
                         Text(
                           'Your review:',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w500,
-                          ),
+                          style: TextStyle(fontWeight: FontWeight.w500),
                         ),
                         const SizedBox(height: 4),
                         Text(_userReview!.reviewText),
@@ -1425,12 +1637,17 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                           children: [
                             TweenAnimationBuilder<double>(
                               duration: const Duration(milliseconds: 500),
-                              tween: Tween(begin: 1.0, end: _checkedIn ? 1.2 : 1.0),
+                              tween: Tween(
+                                begin: 1.0,
+                                end: _checkedIn ? 1.2 : 1.0,
+                              ),
                               builder: (context, scale, child) {
                                 return Transform.scale(
                                   scale: scale,
                                   child: CircleAvatar(
-                                    backgroundColor: _checkedIn ? Colors.green : colorScheme.primaryContainer,
+                                    backgroundColor: _checkedIn
+                                        ? Colors.green
+                                        : colorScheme.primaryContainer,
                                     child: Icon(
                                       _checkedIn ? Icons.check : Icons.place,
                                       color: Colors.white,
@@ -1445,7 +1662,9 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    _checkedIn ? 'You are checked in here' : 'Not checked in yet',
+                                    _checkedIn
+                                        ? 'You are checked in here'
+                                        : 'Not checked in yet',
                                     style: TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.w600,
@@ -1455,13 +1674,17 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                                   if (_checkedIn && _checkInTimeLeft != null)
                                     Text(
                                       'Time left: ${_formatDuration(_checkInTimeLeft!)}',
-                                      style: TextStyle(color: colorScheme.primary),
+                                      style: TextStyle(
+                                        color: colorScheme.primary,
+                                      ),
                                     ),
                                   Text(
                                     _checkedIn
                                         ? 'Great! Others can see your presence.'
                                         : 'Tap to check in for your study session.',
-                                    style: TextStyle(color: colorScheme.onSurfaceVariant),
+                                    style: TextStyle(
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -1470,7 +1693,9 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                               const SizedBox(
                                 height: 24,
                                 width: 24,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               ),
                           ],
                         ),
@@ -1478,7 +1703,10 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                           const SizedBox(height: 8),
                           Text(
                             _checkInError!,
-                            style: const TextStyle(color: Colors.red, fontSize: 12),
+                            style: const TextStyle(
+                              color: Colors.red,
+                              fontSize: 12,
+                            ),
                           ),
                         ],
                         const SizedBox(height: 12),
@@ -1504,34 +1732,51 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                         const SizedBox(height: 12),
                         Align(
                           alignment: Alignment.centerLeft,
-                          child: ElevatedButton.icon(
-                            onPressed: (_checkingIn || _checkedIn) ? null : _checkIn,
-                            icon: const Icon(Icons.login),
-                            label: Text(
-                              _checkedIn
-                                  ? 'Checked in'
-                                  : _checkingIn
+                          child: Wrap(
+                            spacing: 12, // Space between buttons
+                            runSpacing: 8, // Space between rows if wrapped
+                            children: [
+                              ElevatedButton.icon(
+                                onPressed: (_checkingIn || _checkedIn)
+                                    ? null
+                                    : _checkIn,
+                                icon: const Icon(Icons.login),
+                                label: Text(
+                                  _checkingIn
                                       ? 'Checking in...'
                                       : 'Check in here',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF6750A4),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 20,
+                                    vertical: 12,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(100),
+                                  ),
+                                ),
                               ),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF6750A4),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(100),
-                              ),
-                            ),
+                              if (_checkedIn)
+                                OutlinedButton.icon(
+                                  onPressed: _cancelCheckIn,
+                                  icon: const Icon(
+                                    Icons.cancel,
+                                    color: Colors.red,
+                                  ),
+                                  label: const Text('Cancel check-in'),
+                                ),
+                            ],
                           ),
                         ),
                       ],
                     ),
                   ),
-
                 ),
                 const SizedBox(height: 16),
 
@@ -1563,7 +1808,10 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                             else
                               CircleAvatar(
                                 backgroundColor: colorScheme.primaryContainer,
-                                child: const Icon(Icons.volume_up, color: Colors.white),
+                                child: const Icon(
+                                  Icons.volume_up,
+                                  color: Colors.white,
+                                ),
                               ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -1582,7 +1830,9 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                                   ),
                                   Text(
                                     _isMeasuringNoise
-                                        ? (NoiseService.getNoiseCategory(_lastNoiseDb ?? 0))
+                                        ? (NoiseService.getNoiseCategory(
+                                            _lastNoiseDb ?? 0,
+                                          ))
                                         : 'Tap to capture a snapshot',
                                     style: TextStyle(
                                       color: colorScheme.onSurfaceVariant,
@@ -1597,7 +1847,10 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                           const SizedBox(height: 8),
                           Text(
                             _noiseError!,
-                            style: const TextStyle(color: Colors.red, fontSize: 12),
+                            style: const TextStyle(
+                              color: Colors.red,
+                              fontSize: 12,
+                            ),
                           ),
                         ],
                         const SizedBox(height: 12),
@@ -1607,7 +1860,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                             onPressed: _measureNoiseLevel,
                             icon: const Icon(Icons.hearing),
                             label: Text(
-                              _measuredNoiseLevel != null 
+                              _measuredNoiseLevel != null
                                   ? 'Measured: ${_measuredNoiseLevel!.toStringAsFixed(1)} dB'
                                   : 'Measure noise',
                               style: const TextStyle(
@@ -1618,7 +1871,10 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF6750A4),
                               foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 12,
+                              ),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(100),
                               ),
@@ -1715,7 +1971,10 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                       children: [
                         Row(
                           children: [
-                            Icon(Icons.photo_library, color: colorScheme.primary),
+                            Icon(
+                              Icons.photo_library,
+                              color: colorScheme.primary,
+                            ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
@@ -1727,13 +1986,28 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                               ),
                             ),
                             ElevatedButton.icon(
-                              onPressed: (_photoBase64List.length >= 3 || _isPickingPhoto) ? null : _pickPhoto,
-                              icon: _isPickingPhoto 
-                                ? SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                                : Icon(Icons.add_photo_alternate, size: 18),
-                              label: Text(_isPickingPhoto ? 'Loading...' : 'Add'),
+                              onPressed:
+                                  (_photoBase64List.length >= 3 ||
+                                      _isPickingPhoto)
+                                  ? null
+                                  : _pickPhoto,
+                              icon: _isPickingPhoto
+                                  ? SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : Icon(Icons.add_photo_alternate, size: 18),
+                              label: Text(
+                                _isPickingPhoto ? 'Loading...' : 'Add',
+                              ),
                               style: ElevatedButton.styleFrom(
-                                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
                               ),
                             ),
                           ],
@@ -1753,7 +2027,9 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                                       ClipRRect(
                                         borderRadius: BorderRadius.circular(8),
                                         child: Image.memory(
-                                          ImageService.decodeBase64(_photoBase64List[index])!,
+                                          ImageService.decodeBase64(
+                                            _photoBase64List[index],
+                                          )!,
                                           width: 80,
                                           height: 80,
                                           fit: BoxFit.cover,
@@ -1795,7 +2071,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                 ),
                 const SizedBox(height: 32),
               ],
-              
+
               // Power Outlets Section
               if (!_hasReviewed) ...[
                 Center(
@@ -1811,23 +2087,17 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                 const SizedBox(height: 16),
                 Row(
                   children: [
-                    Expanded(
-                      child: _buildOutletButton('None'),
-                    ),
+                    Expanded(child: _buildOutletButton('None')),
                     const SizedBox(width: 2),
-                    Expanded(
-                      child: _buildOutletButton('Few'),
-                    ),
+                    Expanded(child: _buildOutletButton('Few')),
                     const SizedBox(width: 2),
-                    Expanded(
-                      child: _buildOutletButton('A lot'),
-                    ),
+                    Expanded(child: _buildOutletButton('A lot')),
                   ],
                 ),
-                
+
                 const SizedBox(height: 32),
               ],
-              
+
               // Submit Button
               if (!_hasReviewed) ...[
                 SizedBox(
@@ -1861,9 +2131,9 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                   ),
                 ),
               ],
-              
+
               const SizedBox(height: 48),
-              
+
               // All Reviews Section
               if (widget.place.placeId != null) ...[
                 Text(
@@ -1886,7 +2156,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                         ),
                       );
                     }
-                    
+
                     if (snapshot.hasError) {
                       return Center(
                         child: Padding(
@@ -1898,9 +2168,9 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                         ),
                       );
                     }
-                    
+
                     final reviews = snapshot.data ?? [];
-                    
+
                     if (reviews.isEmpty) {
                       return Center(
                         child: Padding(
@@ -1918,15 +2188,19 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
 
                     // Calculate summary
                     final totalReviews = reviews.length;
-                    final averageRating = reviews.fold<double>(0, (sum, r) => sum + r.rating) / totalReviews;
-                    
+                    final averageRating =
+                        reviews.fold<double>(0, (sum, r) => sum + r.rating) /
+                        totalReviews;
+
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // Summary Card
                         Card(
                           elevation: 0,
-                          color: colorScheme.primaryContainer.withValues(alpha: 0.3),
+                          color: colorScheme.primaryContainer.withValues(
+                            alpha: 0.3,
+                          ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
                           ),
@@ -1947,7 +2221,9 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                                     Row(
                                       children: List.generate(5, (index) {
                                         return Icon(
-                                          index < averageRating.round() ? Icons.star : Icons.star_border,
+                                          index < averageRating.round()
+                                              ? Icons.star
+                                              : Icons.star_border,
                                           size: 16,
                                           color: const Color(0xFFFBBF24),
                                         );
@@ -1966,7 +2242,8 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                                 const SizedBox(width: 24),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         'Agora Community Summary',
@@ -2017,20 +2294,22 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
     String url;
     if (placeId != null && placeId.isNotEmpty) {
       // Use Google Maps Place ID search
-      url = 'https://www.google.com/maps/search/?api=1&query=Google&query_place_id=$placeId';
+      url =
+          'https://www.google.com/maps/search/?api=1&query=Google&query_place_id=$placeId';
     } else {
       // Fallback to coordinates
       final lat = widget.place.location.latitude;
       final lng = widget.place.location.longitude;
-      url = 'https://www.google.com/maps/search/?api=1&query=$name&query=$lat,$lng';
+      url =
+          'https://www.google.com/maps/search/?api=1&query=$name&query=$lat,$lng';
     }
     if (await canLaunchUrl(Uri.parse(url))) {
       await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
     } else {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open map.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Could not open map.')));
     }
   }
 
@@ -2038,7 +2317,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
     final isSelected = _selectedOutlets == label;
     final isFirst = label == 'None';
     final isLast = label == 'A lot';
-    
+
     return GestureDetector(
       onTap: () {
         if (!mounted) return;
@@ -2087,9 +2366,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -2098,7 +2375,9 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
             // Header: User name and date
             review.userId != null
                 ? FutureBuilder<String>(
-                    future: UserDisplayNameCache().getDisplayName(review.userId!),
+                    future: UserDisplayNameCache().getDisplayName(
+                      review.userId!,
+                    ),
                     builder: (context, snapshot) {
                       final displayName = snapshot.data ?? '...';
                       return Row(
@@ -2107,7 +2386,9 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                             radius: 20,
                             backgroundColor: colorScheme.primaryContainer,
                             child: Text(
-                              displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
+                              displayName.isNotEmpty
+                                  ? displayName[0].toUpperCase()
+                                  : '?',
                               style: TextStyle(
                                 color: colorScheme.primary,
                                 fontWeight: FontWeight.bold,
@@ -2147,7 +2428,8 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                         radius: 20,
                         backgroundColor: colorScheme.primaryContainer,
                         child: Text(
-                          (review.displayName != null && review.displayName!.isNotEmpty)
+                          (review.displayName != null &&
+                                  review.displayName!.isNotEmpty)
                               ? review.displayName![0].toUpperCase()
                               : '?',
                           style: TextStyle(
@@ -2182,7 +2464,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                     ],
                   ),
             const SizedBox(height: 12),
-            
+
             // Rating stars
             Row(
               children: List.generate(5, (index) {
@@ -2194,7 +2476,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
               }),
             ),
             const SizedBox(height: 8),
-            
+
             // Outlets info
             Row(
               children: [
@@ -2210,7 +2492,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
               ],
             ),
             const SizedBox(height: 12),
-            
+
             // Review text
             Text(
               review.reviewText,
@@ -2222,7 +2504,10 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
             ),
 
             // Display enhanced attributes if available
-            if (review.wifiQuality != null || review.comfortLevel != null || review.aestheticRating != null || review.noiseLevel != null)
+            if (review.wifiQuality != null ||
+                review.comfortLevel != null ||
+                review.aestheticRating != null ||
+                review.noiseLevel != null)
               Padding(
                 padding: const EdgeInsets.only(top: 16),
                 child: Wrap(
@@ -2230,15 +2515,35 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                   runSpacing: 8,
                   children: [
                     if (review.wifiQuality != null)
-                      _buildAttributeChip(Icons.wifi, 'Wi-Fi ${review.wifiQuality}/5', colorScheme),
+                      _buildAttributeChip(
+                        Icons.wifi,
+                        'Wi-Fi ${review.wifiQuality}/5',
+                        colorScheme,
+                      ),
                     if (review.comfortLevel != null)
-                      _buildAttributeChip(Icons.chair, 'Comfort ${review.comfortLevel}/5', colorScheme),
+                      _buildAttributeChip(
+                        Icons.chair,
+                        'Comfort ${review.comfortLevel}/5',
+                        colorScheme,
+                      ),
                     if (review.aestheticRating != null)
-                      _buildAttributeChip(Icons.palette, 'Aesthetic ${review.aestheticRating}/5', colorScheme),
+                      _buildAttributeChip(
+                        Icons.palette,
+                        'Aesthetic ${review.aestheticRating}/5',
+                        colorScheme,
+                      ),
                     if (review.noiseLevel != null)
-                      _buildAttributeChip(Icons.volume_up, '${review.noiseLevel!.toStringAsFixed(1)} dB', colorScheme),
+                      _buildAttributeChip(
+                        Icons.volume_up,
+                        '${review.noiseLevel!.toStringAsFixed(1)} dB',
+                        colorScheme,
+                      ),
                     if (review.averagePrice != null)
-                      _buildAttributeChip(Icons.euro, review.averagePrice!, colorScheme),
+                      _buildAttributeChip(
+                        Icons.euro,
+                        review.averagePrice!,
+                        colorScheme,
+                      ),
                   ],
                 ),
               ),
@@ -2266,9 +2571,12 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                         itemCount: review.userPhotos!.length,
                         itemBuilder: (context, index) {
                           final base64Photo = review.userPhotos![index];
-                          final imageBytes = ImageService.decodeBase64(base64Photo);
-                          if (imageBytes == null) return const SizedBox.shrink();
-                          
+                          final imageBytes = ImageService.decodeBase64(
+                            base64Photo,
+                          );
+                          if (imageBytes == null)
+                            return const SizedBox.shrink();
+
                           return Padding(
                             padding: const EdgeInsets.only(right: 8),
                             child: GestureDetector(
@@ -2284,8 +2592,12 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                                         Align(
                                           alignment: Alignment.topRight,
                                           child: IconButton(
-                                            icon: Icon(Icons.close, color: Colors.white),
-                                            onPressed: () => Navigator.of(context).pop(),
+                                            icon: Icon(
+                                              Icons.close,
+                                              color: Colors.white,
+                                            ),
+                                            onPressed: () =>
+                                                Navigator.of(context).pop(),
                                           ),
                                         ),
                                         InteractiveViewer(
@@ -2325,7 +2637,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
   String _formatDate(DateTime date) {
     final now = DateTime.now();
     final difference = now.difference(date);
-    
+
     if (difference.inDays == 0) {
       if (difference.inHours == 0) {
         return '${difference.inMinutes} minutes ago';
@@ -2340,7 +2652,12 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
     }
   }
 
-  Widget _buildAttributeRow(IconData icon, String label, double value, ColorScheme colorScheme) {
+  Widget _buildAttributeRow(
+    IconData icon,
+    String label,
+    double value,
+    ColorScheme colorScheme,
+  ) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -2350,10 +2667,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
           Expanded(
             child: Text(
               label,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
             ),
           ),
           if (value > 0)
@@ -2379,25 +2693,30 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
     );
   }
 
-  Widget _buildAttributeChip(IconData icon, String label, ColorScheme colorScheme) {
+  Widget _buildAttributeChip(
+    IconData icon,
+    String label,
+    ColorScheme colorScheme,
+  ) {
     return Chip(
       avatar: Icon(icon, size: 16, color: colorScheme.primary),
-      label: Text(
-        label,
-        style: TextStyle(fontSize: 12),
-      ),
+      label: Text(label, style: TextStyle(fontSize: 12)),
       backgroundColor: colorScheme.primaryContainer.withAlpha(100),
       padding: EdgeInsets.symmetric(horizontal: 4, vertical: 0),
       visualDensity: VisualDensity.compact,
     );
   }
 
-  Widget _buildSliderCard(String label, IconData icon, int value, Function(double) onChanged, ColorScheme colorScheme) {
+  Widget _buildSliderCard(
+    String label,
+    IconData icon,
+    int value,
+    Function(double) onChanged,
+    ColorScheme colorScheme,
+  ) {
     return Card(
       elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -2410,10 +2729,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                 Expanded(
                   child: Text(
                     label,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                 ),
                 if (value > 0)
@@ -2451,7 +2767,10 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
       height: 40,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: List.generate(4, (index) => _AnimatedBar(index: index, colorScheme: colorScheme)),
+        children: List.generate(
+          4,
+          (index) => _AnimatedBar(index: index, colorScheme: colorScheme),
+        ),
       ),
     );
   }
@@ -2466,7 +2785,8 @@ class _AnimatedBar extends StatefulWidget {
   State<_AnimatedBar> createState() => _AnimatedBarState();
 }
 
-class _AnimatedBarState extends State<_AnimatedBar> with SingleTickerProviderStateMixin {
+class _AnimatedBarState extends State<_AnimatedBar>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _animation;
 
@@ -2477,9 +2797,10 @@ class _AnimatedBarState extends State<_AnimatedBar> with SingleTickerProviderSta
       duration: Duration(milliseconds: 400 + (widget.index * 150)),
       vsync: this,
     )..repeat(reverse: true);
-    _animation = Tween<double>(begin: 0.2, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _animation = Tween<double>(
+      begin: 0.2,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
