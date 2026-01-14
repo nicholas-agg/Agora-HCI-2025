@@ -17,5 +17,5 @@
 
 ## Β. Πληροφορίες συμβατότητας / APK
 
-- Υποστηρίζονται σύγχρονες Android συσκευές (Android 7.0/SDK 24 και πάνω) με Google Play Services ενεργά.
+- Το Android SDK που χρησιμοποιήθηκε για την ανάπτυξη της εφαρμογής είναι Android SDK version 35.0.1,
 - Το παρεχόμενο APK λειτουργεί σε συσκευές με Google Play (Google APIs). Αν θέλεις να το κάνεις build from source, μπορείς με `flutter build apk`.
