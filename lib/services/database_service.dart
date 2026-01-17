@@ -227,13 +227,15 @@ class DatabaseService {
 
       // Add optional fields only if provided
       if (wifiQuality != null) updateData['wifiQuality'] = wifiQuality;
-      if (outletAvailability != null)
+      if (outletAvailability != null) {
         updateData['outletAvailability'] = outletAvailability;
+      }
       if (averagePrice != null) updateData['averagePrice'] = averagePrice;
       if (noiseLevel != null) updateData['noiseLevel'] = noiseLevel;
       if (comfortLevel != null) updateData['comfortLevel'] = comfortLevel;
-      if (aestheticRating != null)
+      if (aestheticRating != null) {
         updateData['aestheticRating'] = aestheticRating;
+      }
       if (userPhotos != null) updateData['userPhotos'] = userPhotos;
 
       await _firestore.collection('reviews').doc(reviewId).update(updateData);

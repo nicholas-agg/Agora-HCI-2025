@@ -403,8 +403,10 @@ class _ProfilePageState extends State<ProfilePage> {
                         const SizedBox(height: 12),
                         Divider(color: colorScheme.onPrimaryContainer.withAlpha(80)),
                         const SizedBox(height: 8),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        Wrap(
+                          alignment: WrapAlignment.spaceBetween,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          runSpacing: 8,
                           children: [
                             Text(
                               'Global Rank: ${_userRank ?? 'Unranked'}',

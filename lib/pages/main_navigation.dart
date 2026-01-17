@@ -47,7 +47,11 @@ class _MainNavigationState extends State<MainNavigation> {
       // If profile tab is tapped, recreate with new key to force reload
       if (index == 2) {
         _profilePageKey = GlobalKey();
-        _pages[2] = ProfilePage(key: _profilePageKey, onSignOut: widget.onLogout);
+        _pages[2] = ProfilePage(
+          key: _profilePageKey,
+          onSignOut: widget.onLogout,
+          onBackToHome: _goHome,
+        );
       }
       _currentIndex = index;
     });

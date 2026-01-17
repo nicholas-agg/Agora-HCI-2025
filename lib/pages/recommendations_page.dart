@@ -26,13 +26,13 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
   }
 
   Future<void> _fetchRecommendations() async {
-    final RecommendationService _recommendationService = RecommendationService();
+    final RecommendationService recommendationService = RecommendationService();
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final recs = await _recommendationService.getRecommendations(limit: 20);
+      final recs = await recommendationService.getRecommendations(limit: 20);
       if (!mounted) return;
       setState(() {
         _recommendations = recs;

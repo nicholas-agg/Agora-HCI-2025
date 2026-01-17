@@ -1045,11 +1045,11 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
             ),
             tooltip: isFavorite ? 'Unfavorite' : 'Favorite',
             onPressed: () async {
-              final messengerContext = context;
               await _favoritesManager.toggleFavorite(widget.place);
               if (!mounted) return;
               setState(() {});
-              ScaffoldMessenger.of(messengerContext).showSnackBar(
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(
                     isFavorite
@@ -1153,8 +1153,9 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                               final imageBytes = ImageService.decodeBase64(
                                 photos[index],
                               );
-                              if (imageBytes == null)
+                              if (imageBytes == null) {
                                 return const SizedBox.shrink();
+                              }
 
                               return Padding(
                                 padding: const EdgeInsets.only(right: 8),
@@ -1190,8 +1191,9 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                                                       ImageService.decodeBase64(
                                                         photos[pageIndex],
                                                       );
-                                                  if (bytes == null)
+                                                  if (bytes == null) {
                                                     return const SizedBox.shrink();
+                                                  }
                                                   return InteractiveViewer(
                                                     child: Center(
                                                       child: Image.memory(
@@ -1326,7 +1328,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                 curve: Curves.easeOutBack,
                 builder: (context, value, child) {
                   return Transform(
-                    transform: Matrix4.identity()..scale(value),
+                    transform: Matrix4.identity()..scaleByDouble(value, value, value, 0.0),
                     alignment: Alignment.center,
                     child: child,
                   );
@@ -1355,7 +1357,12 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
                             transform: Matrix4.identity()
-                              ..scale(index < _selectedRating ? 1.1 : 1.0),
+                              ..scaleByDouble(
+                                index < _selectedRating ? 1.1 : 1.0,
+                                index < _selectedRating ? 1.1 : 1.0,
+                                index < _selectedRating ? 1.1 : 1.0,
+                                0.0,
+                              ),
                             child: Icon(
                               index < _selectedRating
                                   ? Icons.star
@@ -1443,7 +1450,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                                             return Icon(
                                               Icons.volume_up,
                                               color: colorScheme.primary
-                                                  .withValues(alpha: value),
+                                                  .withAlpha((255 * value).toInt()),
                                             );
                                           },
                                         ),
@@ -1643,7 +1650,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                               ),
                               builder: (context, scale, child) {
                                 return Transform.scale(
-                                  scale: scale,
+                                  scale: scale.toDouble(),
                                   child: CircleAvatar(
                                     backgroundColor: _checkedIn
                                         ? Colors.green
@@ -2198,9 +2205,7 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                         // Summary Card
                         Card(
                           elevation: 0,
-                          color: colorScheme.primaryContainer.withValues(
-                            alpha: 0.3,
-                          ),
+                          color: colorScheme.primaryContainer.withValues(alpha: 0.3),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
                           ),
@@ -2574,9 +2579,9 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                           final imageBytes = ImageService.decodeBase64(
                             base64Photo,
                           );
-                          if (imageBytes == null)
+                          if (imageBytes == null) {
                             return const SizedBox.shrink();
-
+                          }
                           return Padding(
                             padding: const EdgeInsets.only(right: 8),
                             child: GestureDetector(

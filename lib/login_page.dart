@@ -16,6 +16,7 @@ class _LoginPageState extends State<LoginPage> {
   bool _loading = false;
   String? _error;
   bool _isSignUp = false; // Toggle between sign in and sign up
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
@@ -247,10 +248,22 @@ class _LoginPageState extends State<LoginPage> {
                         // Password field
                         TextField(
                           controller: _passwordController,
-                          obscureText: true,
+                          obscureText: _obscurePassword,
                           decoration: InputDecoration(
                             labelText: 'Password',
                             prefixIcon: Icon(Icons.lock, color: colorScheme.primary),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                                color: colorScheme.primary,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _obscurePassword = !_obscurePassword;
+                                });
+                              },
+                              tooltip: _obscurePassword ? 'Show password' : 'Hide password',
+                            ),
                           ),
                         ),
                         

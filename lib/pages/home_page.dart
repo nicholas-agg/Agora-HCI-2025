@@ -110,110 +110,122 @@ class _MyHomePageState extends State<MyHomePage> {
   void initState() {
     super.initState();
     _speech = stt.SpeechToText();
-    _loadCustomMarkerIcons();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadCustomMarkerIcons();
+    });
     _checkLocationPermission();
   }
 
   Future<void> _loadCustomMarkerIcons() async {
-    // Helper to create a BitmapDescriptor from a Material icon
-    Future<BitmapDescriptor> createIcon(IconData icon, Color color) async {
-      // Medium pin for Google Maps scaling (logical: 80x98)
-      const double scale = 3.0;
-      final double width = 80 * scale, height = 98 * scale;
-      final pictureRecorder = ui.PictureRecorder();
-      final canvas = Canvas(pictureRecorder);
-
-      // Draw shadow (bigger and more oval, like Google)
-      final shadowPaint = Paint()
-        ..color = Colors.black.withAlpha(100)
-        ..style = PaintingStyle.fill
-        ..isAntiAlias = true;
-      canvas.drawOval(
-        Rect.fromCenter(
-          center: Offset(width / 2, height - 16 * scale),
-          width: 32 * scale,
-          height: 12 * scale,
-        ),
-        shadowPaint,
-      );
-
-      // Draw teardrop pin shape (circle + triangle, more Googley)
-      final pinPaint = Paint()
-        ..color = color
-        ..style = PaintingStyle.fill
-        ..isAntiAlias = true;
-
-      // Main circle
-      final circleRadius = 32 * scale;
-      final circleCenter = Offset(width / 2, circleRadius + 8 * scale);
-      canvas.drawCircle(circleCenter, circleRadius, pinPaint);
-
-      // Teardrop triangle (longer, more pointed)
-      final path = Path();
-      path.moveTo(width / 2 - 18.5 * scale, circleCenter.dy + 12 * scale);
-      path.lineTo(width / 2, height - 21 * scale);
-      path.lineTo(width / 2 + 18.5 * scale, circleCenter.dy + 12 * scale);
-      path.close();
-      canvas.drawPath(path, pinPaint);
-
-      // Draw icon in center (smaller)
-      final iconPainter = TextPainter(
-        text: TextSpan(
-          text: String.fromCharCode(icon.codePoint),
-          style: TextStyle(
-            fontSize: 40 * scale,
-            fontFamily: icon.fontFamily,
-            color: Colors.white,
-            package: icon.fontPackage,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      );
-      iconPainter.layout();
-      iconPainter.paint(
-        canvas,
-        Offset(
-          (width - iconPainter.width) / 2,
-          circleCenter.dy - iconPainter.height / 2,
-        ),
-      );
-
-      // Downscale to target size for sharpness
-      final image = await pictureRecorder.endRecording().toImage(
-        width.toInt(),
-        height.toInt(),
-      );
-      final targetWidth = 80, targetHeight = 98;
-      final resized = await image.toByteData(format: ui.ImageByteFormat.png);
-      final codec = await ui.instantiateImageCodec(
-        resized!.buffer.asUint8List(),
-        targetWidth: targetWidth,
-        targetHeight: targetHeight,
-      );
-      final frame = await codec.getNextFrame();
-      final bytes = await frame.image.toByteData(
-        format: ui.ImageByteFormat.png,
-      );
-      return BitmapDescriptor.fromBytes(bytes!.buffer.asUint8List());
-    }
-
-    final cafeIcon = await createIcon(Icons.local_cafe, Colors.brown);
-    final libraryIcon = await createIcon(Icons.menu_book, Colors.blue);
-    final coworkingIcon = await createIcon(Icons.work, Colors.deepPurple);
-    final otherIcon = await createIcon(Icons.location_on, Colors.grey);
-
-    // Create magical icon for recommendations using primary color
     final primaryColor = Theme.of(context).colorScheme.primary;
-    final magicalIcon = await createIcon(Icons.star_rounded, primaryColor);
+    final devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
+    try {
+      // Helper to create a BitmapDescriptor from a Material icon
+      Future<BitmapDescriptor> createIcon(IconData icon, Color color) async {
+        // Medium pin for Google Maps scaling (logical: 80x98)
+        const double scale = 3.0;
+        final double width = 80 * scale, height = 98 * scale;
+        final pictureRecorder = ui.PictureRecorder();
+        final canvas = Canvas(pictureRecorder);
 
-    if (!mounted) return;
-    setState(() {
-      _cafeIcon = cafeIcon;
-      _libraryIcon = libraryIcon;
-      _coworkingIcon = coworkingIcon;
-      _otherIcon = otherIcon;
-      _magicalIcon = magicalIcon;
-    });
+        // Draw shadow (bigger and more oval, like Google)
+        final shadowPaint = Paint()
+          ..color = Colors.black.withAlpha(100)
+          ..style = PaintingStyle.fill
+          ..isAntiAlias = true;
+        canvas.drawOval(
+          Rect.fromCenter(
+            center: Offset(width / 2, height - 16 * scale),
+            width: 32 * scale,
+            height: 12 * scale,
+          ),
+          shadowPaint,
+        );
+
+        // Draw teardrop pin shape (circle + triangle, more Googley)
+        final pinPaint = Paint()
+          ..color = color
+          ..style = PaintingStyle.fill
+          ..isAntiAlias = true;
+
+        // Main circle
+        final circleRadius = 32 * scale;
+        final circleCenter = Offset(width / 2, circleRadius + 8 * scale);
+        canvas.drawCircle(circleCenter, circleRadius, pinPaint);
+
+        // Teardrop triangle (longer, more pointed)
+        final path = Path();
+        path.moveTo(width / 2 - 18.5 * scale, circleCenter.dy + 12 * scale);
+        path.lineTo(width / 2, height - 21 * scale);
+        path.lineTo(width / 2 + 18.5 * scale, circleCenter.dy + 12 * scale);
+        path.close();
+        canvas.drawPath(path, pinPaint);
+
+        // Draw icon in center (smaller)
+        final iconPainter = TextPainter(
+          text: TextSpan(
+            text: String.fromCharCode(icon.codePoint),
+            style: TextStyle(
+              fontSize: 40 * scale,
+              fontFamily: icon.fontFamily,
+              color: Colors.white,
+              package: icon.fontPackage,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        );
+        iconPainter.layout();
+        iconPainter.paint(
+          canvas,
+          Offset(
+            (width - iconPainter.width) / 2,
+            circleCenter.dy - iconPainter.height / 2,
+          ),
+        );
+
+        // Downscale to target size for sharpness
+        final image = await pictureRecorder.endRecording().toImage(
+          width.toInt(),
+          height.toInt(),
+        );
+        final targetWidth = 80, targetHeight = 98;
+        final resized = await image.toByteData(format: ui.ImageByteFormat.png);
+        if (resized == null) return BitmapDescriptor.defaultMarker;
+        final codec = await ui.instantiateImageCodec(
+          resized.buffer.asUint8List(),
+          targetWidth: targetWidth,
+          targetHeight: targetHeight,
+        );
+        final frame = await codec.getNextFrame();
+        final bytes = await frame.image.toByteData(
+          format: ui.ImageByteFormat.png,
+        );
+        if (bytes == null) return BitmapDescriptor.defaultMarker;
+        return BitmapDescriptor.bytes(
+          bytes.buffer.asUint8List(),
+          imagePixelRatio: devicePixelRatio, // Adds scaling awareness
+        );
+      }
+
+      final cafeIcon = await createIcon(Icons.local_cafe, Colors.brown);
+      final libraryIcon = await createIcon(Icons.menu_book, Colors.blue);
+      final coworkingIcon = await createIcon(Icons.work, Colors.deepPurple);
+      final otherIcon = await createIcon(Icons.location_on, Colors.grey);
+
+      // Create magical icon for recommendations using primary color
+      final magicalIcon = await createIcon(Icons.star_rounded, primaryColor);
+
+      if (!mounted) return;
+      setState(() {
+        _cafeIcon = cafeIcon;
+        _libraryIcon = libraryIcon;
+        _coworkingIcon = coworkingIcon;
+        _otherIcon = otherIcon;
+        _magicalIcon = magicalIcon;
+      });
+    } catch (e, st) {
+      debugPrint('Marker icon load failed: $e\n$st');
+    }
   }
 
   BitmapDescriptor _getMarkerIconForType(String type) {
@@ -829,7 +841,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     myLocationEnabled: true,
                     myLocationButtonEnabled: false,
                     zoomControlsEnabled: false,
-                    markers: [
+                    markers: {
                       // Regular places
                       ..._places.map(
                         (place) => Marker(
@@ -864,7 +876,7 @@ class _MyHomePageState extends State<MyHomePage> {
                           icon: _magicalIcon ?? BitmapDescriptor.defaultMarker,
                         ),
                       ),
-                    ].toSet(),
+                    },
                     onMapCreated: (controller) {
                       _mapController = controller;
                     },
