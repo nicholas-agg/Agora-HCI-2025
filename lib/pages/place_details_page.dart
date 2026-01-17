@@ -1321,64 +1321,58 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
 
               const SizedBox(height: 32),
 
-              // Rating Section
-              TweenAnimationBuilder<double>(
-                duration: const Duration(milliseconds: 600),
-                tween: Tween(begin: 0.0, end: 1.0),
-                curve: Curves.easeOutBack,
-                builder: (context, value, child) {
-                  return Transform(
-                    transform: Matrix4.identity()..scaleByDouble(value, value, value, 0.0),
-                    alignment: Alignment.center,
-                    child: child,
-                  );
-                },
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Rating',
-                      style: TextStyle(
-                        fontSize: 36,
-                        fontWeight: FontWeight.w500,
-                        color: colorScheme.onSurface,
+              // Rating Section (only show if user hasn't reviewed yet)
+              if (!_hasReviewed) ...[
+                TweenAnimationBuilder<double>(
+                  duration: const Duration(milliseconds: 600),
+                  tween: Tween(begin: 0.0, end: 1.0),
+                  curve: Curves.easeOutBack,
+                  builder: (context, value, child) {
+                    return Transform.scale(
+                      scale: value,
+                      child: child,
+                    );
+                  },
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Rating',
+                        style: TextStyle(
+                          fontSize: 36,
+                          fontWeight: FontWeight.w500,
+                          color: colorScheme.onSurface,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: List.generate(5, (index) {
-                        return GestureDetector(
-                          onTap: () {
-                            if (!mounted) return;
-                            setState(() {
-                              _selectedRating = index + 1;
-                            });
-                          },
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            transform: Matrix4.identity()
-                              ..scaleByDouble(
-                                index < _selectedRating ? 1.1 : 1.0,
-                                index < _selectedRating ? 1.1 : 1.0,
-                                index < _selectedRating ? 1.1 : 1.0,
-                                0.0,
+                      const SizedBox(height: 12),
+                      Row(
+                        children: List.generate(5, (index) {
+                          return GestureDetector(
+                            onTap: () {
+                              if (!mounted) return;
+                              setState(() {
+                                _selectedRating = index + 1;
+                              });
+                            },
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              transform: Matrix4.identity()
+                                ..scale(index < _selectedRating ? 1.1 : 1.0),
+                              child: Icon(
+                                index < _selectedRating ? Icons.star : Icons.star_border,
+                                size: 40,
+                                color: colorScheme.primary,
                               ),
-                            child: Icon(
-                              index < _selectedRating
-                                  ? Icons.star
-                                  : Icons.star_border,
-                              size: 40,
-                              color: colorScheme.primary,
                             ),
-                          ),
-                        );
-                      }),
-                    ),
-                  ],
+                          );
+                        }),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-
-              const SizedBox(height: 32),
+                
+                const SizedBox(height: 32),
+              ],
 
               // Place Attributes Section (if data exists)
               if (widget.place.placeId != null)
@@ -1581,8 +1575,63 @@ class _PlaceDetailsPageState extends State<PlaceDetailsPage> {
                           'Your review:',
                           style: TextStyle(fontWeight: FontWeight.w500),
                         ),
-                        const SizedBox(height: 4),
-                        Text(_userReview!.reviewText),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: List.generate(5, (index) {
+                            return Icon(
+                              index < _userReview!.rating
+                                  ? Icons.star
+                                  : Icons.star_border,
+                              size: 20,
+                              color: const Color(0xFFFBBF24),
+                            );
+                          }),
+                        ),
+                        const SizedBox(height: 8),
+                        if (_userReview!.outlets.isNotEmpty)
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.power,
+                                size: 16,
+                                color: Color(0xFF6750A4),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Outlets: ${_userReview!.outlets}',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        if (_userReview!.averagePrice != null &&
+                            _userReview!.averagePrice!.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.euro,
+                                size: 16,
+                                color: Color(0xFF6750A4),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                _userReview!.averagePrice!,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                        const SizedBox(height: 8),
+                        Text(
+                          _userReview!.reviewText,
+                          style: TextStyle(color: colorScheme.onSurface),
+                        ),
                       ],
                     ),
                   ),
