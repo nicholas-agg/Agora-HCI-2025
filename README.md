@@ -89,7 +89,7 @@
 
 Παρακάτω μπορείτε να δείτε στιγμιότυπα από την εφαρμογή Agora:
 
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px;">
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px;">
   <img src="screenshots/Screenshot_20260118-134607.png" alt="Screenshot 1" style="width: 100%;">
   <img src="screenshots/Screenshot_20260118-134618.png" alt="Screenshot 2" style="width: 100%;">
   <img src="screenshots/Screenshot_20260118-134626.png" alt="Screenshot 3" style="width: 100%;">
