@@ -89,15 +89,23 @@
 
 Παρακάτω μπορείτε να δείτε στιγμιότυπα από την εφαρμογή Agora:
 
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px;">
-  <img src="screenshots/Screenshot_20260118-134607.png" alt="Screenshot 1" style="width: 100%;">
-  <img src="screenshots/Screenshot_20260118-134618.png" alt="Screenshot 2" style="width: 100%;">
-  <img src="screenshots/Screenshot_20260118-134626.png" alt="Screenshot 3" style="width: 100%;">
-  <img src="screenshots/Screenshot_20260118-134644.png" alt="Screenshot 4" style="width: 100%;">
-  <img src="screenshots/Screenshot_20260118-134650.png" alt="Screenshot 5" style="width: 100%;">
-  <img src="screenshots/Screenshot_20260118-134658.png" alt="Screenshot 6" style="width: 100%;">
-  <img src="screenshots/Screenshot_20260118-134711.png" alt="Screenshot 7" style="width: 100%;">
-</div>
+<table>
+  <tr>
+    <td><img src="screenshots/Screenshot_20260118-134607.png" width="200"></td>
+    <td><img src="screenshots/Screenshot_20260118-134618.png" width="200"></td>
+    <td><img src="screenshots/Screenshot_20260118-134626.png" width="200"></td>
+  </tr>
+  <tr>
+    <td><img src="screenshots/Screenshot_20260118-134644.png" width="200"></td>
+    <td><img src="screenshots/Screenshot_20260118-134650.png" width="200"></td>
+    <td><img src="screenshots/Screenshot_20260118-134658.png" width="200"></td>
+  </tr>
+  <tr>
+    <td><img src="screenshots/Screenshot_20260118-134711.png" width="200"></td>
+    <td></td>
+    <td></td>
+  </tr>
+</table>
 
 ## Ζ. Βίντεο Παρουσίασης Εφαρμογής
 
